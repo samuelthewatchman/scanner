@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RUVA Sell</title>
+<style>
+  :root { --bg:#0b0b0b; --card:#161616; --line:#2a2a2a; --text:#f2f2f2; --mute:#8d8d8d; --gold:#c8a04a;
+          --ok:#1fa75a; --bad:#d23b3b; --warn:#d99a1d; --blue:#4aa3ff; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { padding: 12px 14px calc(30px + env(safe-area-inset-bottom)); max-width: 520px; margin: 0 auto; }
+  header { display:flex; align-items:baseline; justify-content:space-between; padding: 6px 2px 12px; }
+  header h1 { margin:0; font-size:20px; letter-spacing:.12em; }
+  header h1 span { color:var(--gold); }
+  header small { color:var(--mute); font-size:11px; text-align:right; }
+  .stats { display:grid; grid-template-columns: repeat(3,1fr); gap:8px; margin-bottom:12px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 6px; text-align:center; }
+  .stat b { display:block; font-size:22px; }
+  .stat span { font-size:11px; color:var(--mute); letter-spacing:.06em; text-transform:uppercase; }
+  .stat em { display:block; font-style:normal; font-size:11px; color:var(--mute); margin-top:2px; }
+  .tabs { display:grid; grid-template-columns: repeat(3,1fr); gap:6px; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:5px; margin-bottom:14px; }
+  .tabs button { background:transparent; color:var(--mute); padding:10px 4px; border-radius:10px; font-weight:700; }
+  .tabs button.on { background:var(--gold); color:#111; }
+  button { font:inherit; border:0; border-radius:12px; padding:12px 16px; background:var(--gold); color:#111; font-weight:700; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--text); border:1px solid var(--line); font-weight:600; }
+  button.danger { background:var(--bad); color:#fff; }
+  button.big { width:100%; padding:16px; font-size:17px; margin-top:6px; }
+  label { display:block; font-size:12px; color:var(--mute); letter-spacing:.06em; text-transform:uppercase; margin:14px 2px 6px; }
+  input[type=text], input[type=tel], input[type=number], input[type=search] { font:inherit; font-size:16px; padding:13px; border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--text); width:100%; }
+  #serial { text-transform:uppercase; font-size:22px; font-weight:800; letter-spacing:.06em; }
+  .serialrow { display:grid; grid-template-columns: 1fr auto; gap:8px; }
+  .info { min-height:22px; margin:8px 2px 0; font-size:14px; }
+  .info.ok { color:#52d98b; } .info.warn { color:#f0b94a; } .info.bad { color:#ff7a7a; }
+  .two { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+  .seg { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+  .seg button { background:var(--card); color:var(--mute); border:1px solid var(--line); }
+  .seg button.on { background:var(--gold); color:#111; border-color:var(--gold); }
+  .box { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px; margin-bottom:12px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; color:var(--mute); font-weight:600; font-size:11px; letter-spacing:.06em; text-transform:uppercase; padding:4px 6px; }
+  td { padding:7px 6px; border-top:1px solid var(--line); }
+  td.n, th.n { text-align:right; }
+  .list { margin-top:10px; }
+  .item { display:grid; grid-template-columns: auto 1fr auto; gap:10px; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-bottom:8px; }
+  .item .s { font-weight:800; font-size:15px; }
+  .item .s small { display:block; font-weight:600; color:var(--mute); font-size:11px; }
+  .item .m { font-size:13px; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .item .m small { display:block; color:var(--mute); font-size:12px; }
+  .item .r { text-align:right; font-weight:700; }
+  .item .r button { display:block; margin-top:4px; padding:6px 10px; font-size:12px; border-radius:8px; }
+  .item.void { opacity:.55; } .item.void .s { text-decoration:line-through; }
+  .empty { color:var(--mute); text-align:center; padding:22px 8px; font-size:14px; }
+  .stack button { width:100%; margin-bottom:10px; }
+  .note { color:var(--mute); font-size:12px; line-height:1.5; margin:6px 2px 14px; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>R<span>Ü</span>VA · SELL</h1>
+  <small id="evt"></small>
+</header>
+
+<div class="stats">
+  <div class="stat"><b id="sSold">0</b><span>Sold</span></div>
+  <div class="stat"><b id="sMoney">0</b><span>Money GH₵</span></div>
+  <div class="stat"><b id="sLeft">0</b><span>Left</span><em id="sLeftDetail"></em></div>
+</div>
+
+<div class="tabs" id="tabs">
+  <button data-tab="sell" class="on">Sell</button>
+  <button data-tab="sales">Sales</button>
+  <button data-tab="share">Share</button>
+</div>
+
+<!-- ============ SELL ============ -->
+<section id="tab-sell">
+  <label for="serial">Ticket serial</label>
+  <div class="serialrow">
+    <input id="serial" type="text" placeholder="S-014" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text">
+    <button id="scanBtn" class="ghost">Scan QR</button>
+  </div>
+  <div class="info" id="info"></div>
+
+  <div class="two">
+    <div><label for="buyer">Buyer name</label><input id="buyer" type="text" placeholder="optional" autocomplete="off"></div>
+    <div><label for="phone">Buyer phone</label><input id="phone" type="tel" placeholder="optional" autocomplete="off"></div>
+  </div>
+  <div class="two">
+    <div><label for="seller">Seller (you)</label><input id="seller" type="text" placeholder="your name" autocomplete="off"></div>
+    <div><label for="amt">Amount paid GH₵</label><input id="amt" type="number" inputmode="decimal" min="0" step="1" placeholder="0"></div>
+  </div>
+  <label>Paid by</label>
+  <div class="seg" id="pay">
+    <button type="button" data-pay="cash" class="on">Cash</button>
+    <button type="button" data-pay="momo">MoMo</button>
+  </div>
+  <button id="sellBtn" class="big">Mark as sold</button>
+  <div class="note">Hand over the ticket only after you have the money. A ticket only works at the gate after it is marked as sold here.</div>
+</section>
+
+<!-- ============ SALES ============ -->
+<section id="tab-sales" hidden>
+  <div class="box" id="byseller"></div>
+  <input id="search" type="search" placeholder="Search serial, buyer, seller, phone">
+  <div class="list" id="list"></div>
+</section>
+
+<!-- ============ SHARE ============ -->
+<section id="tab-share" hidden>
+  <div class="note">After selling, send your <b>sales code</b> to whoever runs the gate. They paste it into the scanner with <b>Load sales</b>. Send it again after every new sale.</div>
+  <div class="stack">
+    <button id="copyBtn">Copy sales code (for the gate)</button>
+    <button id="importBtn" class="ghost">Load sales code from another seller</button>
+    <button id="csvBtn" class="ghost">Download full sales list (CSV)</button>
+    <button id="eraseBtn" class="ghost" style="color:#ff7a7a">Erase everything on this phone</button>
+  </div>
+  <div class="note" id="builtNote"></div>
+</section>
+
+<script></script>
+<script>/* RÜVA shared helpers, inlined into scanner.html and sell.html by ruva_tickets.py
+   - UI      : popups (modals) instead of browser alerts
+   - QRCam   : camera QR reader
+   - Sales   : "sales code" encode / decode / merge (how sold tickets travel to the gate)
+   - sha256, parseQR, normSerial, copyText, downloadText, fmtMin                                  */
+
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* ---------- SHA-256 (works on plain http / file:// too) ---------- */
+function sha256(str) {
+  const K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  const bytes = Array.from(new TextEncoder().encode(str));
+  const l = bytes.length * 8;
+  bytes.push(0x80);
+  while (bytes.length % 64 !== 56) bytes.push(0);
+  const hi = Math.floor(l / 4294967296), lo = l >>> 0;
+  for (const v of [hi, lo]) bytes.push((v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255);
+  let h = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  const rotr = (x, n) => (x >>> n) | (x << (32 - n));
+  for (let i = 0; i < bytes.length; i += 64) {
+    const w = new Array(64);
+    for (let t = 0; t < 16; t++) w[t] = (bytes[i+4*t] << 24) | (bytes[i+4*t+1] << 16) | (bytes[i+4*t+2] << 8) | bytes[i+4*t+3];
+    for (let t = 16; t < 64; t++) {
+      const s0 = rotr(w[t-15],7) ^ rotr(w[t-15],18) ^ (w[t-15] >>> 3);
+      const s1 = rotr(w[t-2],17) ^ rotr(w[t-2],19) ^ (w[t-2] >>> 10);
+      w[t] = (w[t-16] + s0 + w[t-7] + s1) | 0;
+    }
+    let [a,b,c,d,e,f,g,hh] = h;
+    for (let t = 0; t < 64; t++) {
+      const S1 = rotr(e,6) ^ rotr(e,11) ^ rotr(e,25);
+      const ch = (e & f) ^ (~e & g);
+      const t1 = (hh + S1 + ch + K[t] + w[t]) | 0;
+      const S0 = rotr(a,2) ^ rotr(a,13) ^ rotr(a,22);
+      const maj = (a & b) ^ (a & c) ^ (b & c);
+      const t2 = (S0 + maj) | 0;
+      hh = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+    }
+    h = [(h[0]+a)|0,(h[1]+b)|0,(h[2]+c)|0,(h[3]+d)|0,(h[4]+e)|0,(h[5]+f)|0,(h[6]+g)|0,(h[7]+hh)|0];
+  }
+  return h.map(x => (x >>> 0).toString(16).padStart(8, '0')).join('');
+}
+
+/* ---------- ticket text helpers ---------- */
+// ticket QR looks like  S-001.BB891F01B2207BCD  (serial, dot, 16-character signature)
+function parseQR(text) {
+  const m = String(text).trim().toUpperCase().match(/^([SD]-\d{3,5})\.([0-9A-F]{16})$/);
+  return m ? { serial: m[1], sig: m[2].toLowerCase() } : null;
+}
+// "s14", "S-14", "d 7" -> "S-014", "D-007"; anything else -> ""
+function normSerial(s) {
+  const m = String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').match(/^([SD])(\d{1,5})$/);
+  return m ? m[1] + '-' + m[2].padStart(3, '0') : '';
+}
+const typeName = t => (t === 'S' ? 'Single' : 'Double');
+const fmtMin = m => new Date(m * 60000).toLocaleString([], { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+const fmtTime = iso => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+/* ---------- popups (modals) ---------- */
+const UI = (() => {
+  const CSS = `
+  .mdl-ov{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.74);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);opacity:0;transition:opacity .15s}
+  .mdl-ov.show{opacity:1}
+  .mdl-card{width:100%;max-width:400px;max-height:92vh;overflow:auto;background:#161616;border:1px solid #2a2a2a;border-radius:20px;padding:22px 20px 18px;text-align:center;color:#f2f2f2;transform:translateY(10px) scale(.97);transition:transform .15s;box-shadow:0 20px 60px rgba(0,0,0,.6);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .mdl-ov.show .mdl-card{transform:none}
+  .mdl-icon{width:54px;height:54px;border-radius:50%;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:800;background:#2a2a2a}
+  .tone-ok .mdl-icon{background:#1fa75a;color:#fff}.tone-bad .mdl-icon{background:#d23b3b;color:#fff}
+  .tone-warn .mdl-icon{background:#d99a1d;color:#1a1200}.tone-info .mdl-icon{background:#c8a04a;color:#111}
+  .mdl-title{font-size:21px;font-weight:800;letter-spacing:.02em;margin-bottom:6px}
+  .mdl-body{font-size:15px;line-height:1.55;color:#d6d6d6;word-break:break-word}
+  .mdl-body b{color:#fff}
+  .mdl-extra{margin-top:12px}
+  .mdl-extra video{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:14px;background:#000;display:block}
+  .mdl-in{width:100%;margin-top:14px;padding:12px;border-radius:12px;border:1px solid #333;background:#0f0f0f;color:#fff;font:inherit;font-size:16px}
+  textarea.mdl-in{min-height:110px;resize:vertical;font-family:ui-monospace,Menlo,monospace;font-size:13px;text-align:left}
+  .mdl-btns{display:flex;gap:10px;margin-top:18px}
+  .mdl-btns button{flex:1;font:inherit;font-weight:700;font-size:15px;border:0;border-radius:12px;padding:13px 10px;cursor:pointer;background:#c8a04a;color:#111}
+  .mdl-btns button.ghost{background:transparent;color:#f2f2f2;border:1px solid #3a3a3a}
+  .mdl-btns button.danger{background:#d23b3b;color:#fff}
+  .mdl-card.solid{border:0;padding:30px 20px 22px}
+  .mdl-card.solid.tone-ok{background:#1fa75a;color:#fff}.mdl-card.solid.tone-bad{background:#d23b3b;color:#fff}
+  .mdl-card.solid.tone-warn{background:#d99a1d;color:#1a1200}.mdl-card.solid.tone-info{background:#c8a04a;color:#111}
+  .solid .mdl-icon{background:rgba(255,255,255,.24);color:inherit;width:68px;height:68px;font-size:38px}
+  .solid .mdl-title{font-size:32px}
+  .solid .mdl-body{color:inherit;font-size:17px}.solid .mdl-body b{color:inherit}
+  .solid .mdl-btns button{background:rgba(0,0,0,.28);color:inherit}
+  .mdl-bar{height:4px;background:rgba(255,255,255,.3);border-radius:2px;margin-top:16px;overflow:hidden}
+  .mdl-bar i{display:block;height:100%;background:rgba(255,255,255,.95);transform-origin:left;transform:scaleX(1)}
+  @media (prefers-reduced-motion:reduce){.mdl-ov,.mdl-card{transition:none}}`;
+  const st = document.createElement('style');
+  st.textContent = CSS;
+  document.head.appendChild(st);
+
+  const DEFAULT_ICON = { ok: '✓', bad: '✕', warn: '!', info: 'i' };
+  const stack = [];
+  let z = 1000;
+
+  /* modal({tone, solid, icon, title, body, node, input, buttons, autoClose, backdropClose, onOpen, onClose})
+     -> Promise<{value, text}>  (value = clicked button's value, null if dismissed). The promise has .close(value). */
+  function modal(o) {
+    o = o || {};
+    let closeFn = () => {};
+    const p = new Promise(resolve => {
+      const ov = document.createElement('div');
+      ov.className = 'mdl-ov';
+      ov.style.zIndex = ++z;
+      const tone = o.tone || 'info';
+      const card = document.createElement('div');
+      card.className = 'mdl-card tone-' + tone + (o.solid ? ' solid' : '');
+      card.setAttribute('role', 'dialog');
+      card.setAttribute('aria-modal', 'true');
+      const icon = o.icon === undefined ? DEFAULT_ICON[tone] : o.icon;
+      let h = '';
+      if (icon) h += '<div class="mdl-icon">' + icon + '</div>';
+      if (o.title) h += '<div class="mdl-title">' + o.title + '</div>';
+      if (o.body) h += '<div class="mdl-body">' + o.body + '</div>';
+      card.innerHTML = h;
+      if (o.node) {
+        const w = document.createElement('div');
+        w.className = 'mdl-extra';
+        w.appendChild(o.node);
+        card.appendChild(w);
+      }
+      let inp = null;
+      if (o.input) {
+        inp = document.createElement(o.input.rows ? 'textarea' : 'input');
+        inp.className = 'mdl-in';
+        if (o.input.rows) inp.rows = o.input.rows; else inp.type = o.input.type || 'text';
+        if (o.input.placeholder) inp.placeholder = o.input.placeholder;
+        if (o.input.value) inp.value = o.input.value;
+        if (o.input.readonly) inp.readOnly = true;
+        if (o.input.upper) inp.style.textTransform = 'uppercase';
+        inp.setAttribute('autocomplete', 'off');
+        inp.setAttribute('autocapitalize', o.input.upper ? 'characters' : 'off');
+        inp.setAttribute('spellcheck', 'false');
+        card.appendChild(inp);
+      }
+      const buttons = o.buttons || [{ label: 'OK', value: true }];
+      let primary = null;
+      if (buttons.length) {
+        const row = document.createElement('div');
+        row.className = 'mdl-btns';
+        buttons.forEach(b => {
+          const el = document.createElement('button');
+          el.type = 'button';
+          el.className = b.kind || '';
+          el.textContent = b.label;
+          el.addEventListener('click', () => closeFn(b.value));
+          if (!primary && b.kind !== 'ghost') primary = { el, value: b.value };
+          row.appendChild(el);
+        });
+        card.appendChild(row);
+      }
+      let timer = null, done = false;
+      const bar = o.autoClose ? document.createElement('div') : null;
+      if (bar) { bar.className = 'mdl-bar'; bar.innerHTML = '<i></i>'; card.appendChild(bar); }
+      const prevFocus = document.activeElement;
+      const onKey = e => {
+        if (stack[stack.length - 1] !== ov) return;
+        if (e.key === 'Escape' && o.cancelable !== false) { e.stopPropagation(); closeFn(null); }
+        else if (e.key === 'Enter' && inp && inp.tagName === 'INPUT' && primary) { e.preventDefault(); primary.el.click(); }
+      };
+      closeFn = value => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        document.removeEventListener('keydown', onKey, true);
+        const i = stack.indexOf(ov); if (i >= 0) stack.splice(i, 1);
+        ov.classList.remove('show');
+        setTimeout(() => ov.remove(), 170);
+        try { if (prevFocus && prevFocus.focus && document.contains(prevFocus)) prevFocus.focus(); } catch (e) {}
+        if (o.onClose) { try { o.onClose(); } catch (e) {} }
+        resolve({ value: value === undefined ? null : value, text: inp ? inp.value : '' });
+      };
+      ov.addEventListener('click', e => {
+        if (o.backdropClose && (e.target === ov || o.solid)) closeFn(o.solid ? 'tap' : null);
+      });
+      ov.appendChild(card);
+      document.body.appendChild(ov);
+      stack.push(ov);
+      document.addEventListener('keydown', onKey, true);
+      requestAnimationFrame(() => ov.classList.add('show'));
+      if (o.autoClose) {
+        timer = setTimeout(() => closeFn('auto'), o.autoClose);
+        const i = bar.firstChild;
+        i.style.transition = 'transform ' + o.autoClose + 'ms linear';
+        requestAnimationFrame(() => requestAnimationFrame(() => { i.style.transform = 'scaleX(0)'; }));
+      }
+      setTimeout(() => {
+        try { (inp || (primary && primary.el) || card).focus({ preventScroll: true }); } catch (e) {}
+        if (o.onOpen) { try { o.onOpen({ card, input: inp, close: closeFn }); } catch (e) {} }
+      }, 30);
+    });
+    p.close = v => closeFn(v);
+    return p;
+  }
+
+  async function confirm(o) {
+    const r = await modal(Object.assign({
+      icon: '?',
+      buttons: [{ label: o.no || 'Cancel', value: false, kind: 'ghost' }, { label: o.yes || 'Yes', value: true, kind: o.danger ? 'danger' : '' }],
+    }, o));
+    return r.value === true;
+  }
+  return { modal, confirm, isOpen: () => stack.length > 0 };
+})();
+
+/* ---------- camera QR reader ---------- */
+const QRCam = {
+  // Resolves to {stop()}. Rejects with an Error whose .code is nohttps | nosupport | denied | other
+  async start(video, onText) {
+    const fail = code => Object.assign(new Error(code), { code });
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw fail('nohttps');
+    const hasNative = 'BarcodeDetector' in window;
+    const hasJs = typeof jsQR === 'function';
+    if (!hasNative && !hasJs) throw fail('nosupport');
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false });
+    } catch (e) {
+      throw fail(e && (e.name === 'NotAllowedError' || e.name === 'SecurityError') ? 'denied' : 'other');
+    }
+    video.srcObject = stream;
+    video.setAttribute('playsinline', '');
+    video.muted = true;
+    try { await video.play(); } catch (e) {}
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const det = hasNative ? new BarcodeDetector({ formats: ['qr_code'] }) : null;
+    let busy = false;
+    const id = setInterval(async () => {
+      if (busy || video.readyState < 2) return;
+      busy = true;
+      try {
+        if (det) {
+          const codes = await det.detect(video);
+          if (codes.length) onText(codes[0].rawValue);
+        } else {
+          canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+          ctx.drawImage(video, 0, 0);
+          const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const r = jsQR(img.data, img.width, img.height);
+          if (r) onText(r.data);
+        }
+      } catch (e) {}
+      busy = false;
+    }, 160);
+    return { stop() { clearInterval(id); stream.getTracks().forEach(t => t.stop()); video.srcObject = null; } };
+  },
+  // friendly popup text for a failed start()
+  errorPopup(code) {
+    const m = {
+      nohttps: ['Camera needs the secure link', 'Open this page from the hosted <b>https</b> link, not from a file or an http link. Until then, type the ticket serial instead.'],
+      nosupport: ['This browser cannot scan', 'Use <b>Chrome on Android</b> for camera scanning. Meanwhile you can type the ticket serial instead.'],
+      denied: ['Camera is blocked', 'Allow camera access for this site in the browser settings, then try again.'],
+      other: ['Could not open the camera', 'Close other apps that use the camera, then try again.'],
+    }[code] || ['Could not open the camera', 'Try again.'];
+    return { tone: 'warn', title: m[0], body: m[1] };
+  },
+};
+
+/* ---------- sales codes ----------
+   A sales record is  sales[serial] = { st: 1 (sold) | 0 (cancelled), t: minutes-since-1970, ...details }
+   A "sales code" is plain text, e.g.  RUVA1|S-001:1:s8x2k;D-004:1:s8x3q|a1b2c3   (safe to send on WhatsApp)
+   When two records disagree, the newer one (bigger t) wins.                                                   */
+const Sales = {
+  nowMin: () => Math.floor(Date.now() / 60000),
+  encode(sales) {
+    const body = Object.keys(sales).sort().map(k => k + ':' + sales[k].st + ':' + sales[k].t.toString(36)).join(';');
+    return 'RUVA1|' + body + '|' + sha256(body).slice(0, 6);
+  },
+  decode(text) {
+    const m = String(text).replace(/\s+/g, '').match(/RUVA1\|([A-Za-z0-9:;-]*)\|([0-9a-f]{6})/);
+    if (!m) return { ok: false, why: 'format' };
+    if (sha256(m[1]).slice(0, 6) !== m[2]) return { ok: false, why: 'damaged' };
+    const recs = []; let bad = 0;
+    for (const part of m[1].split(';')) {
+      if (!part) continue;
+      const r = part.match(/^([SD]-\d{3,5}):([01]):([0-9a-z]{1,8})$/);
+      if (!r) { bad++; continue; }
+      recs.push({ s: r[1], st: +r[2], t: parseInt(r[3], 36) });
+    }
+    return { ok: true, recs, bad };
+  },
+  // known = TICKETS (each may carry baseline sold flag .s). Returns counts of what changed.
+  merge(sales, recs, known) {
+    const out = { added: 0, voided: 0, same: 0, unknown: 0 };
+    for (const r of recs) {
+      if (!known[r.s]) { out.unknown++; continue; }
+      const cur = sales[r.s];
+      const before = cur ? cur.st === 1 : !!known[r.s].s;
+      if (cur && r.t <= cur.t) { out.same++; continue; }
+      if (cur) { cur.st = r.st; cur.t = r.t; } else sales[r.s] = { st: r.st, t: r.t, imp: 1 };
+      const after = r.st === 1;
+      if (before === after) out.same++; else if (after) out.added++; else out.voided++;
+    }
+    return out;
+  },
+};
+
+/* ---------- small utilities ---------- */
+function downloadText(name, text, mime) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: mime || 'text/plain' }));
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+async function copyText(text, why) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    const ok = document.execCommand('copy'); ta.remove();
+    if (ok) return true;
+  } catch (e) {}
+  await UI.modal({
+    tone: 'info', icon: '⧉', title: 'Copy this text',
+    body: (why ? why + '<br>' : '') + 'Press and hold inside the box, choose <b>Select all</b>, then <b>Copy</b>.',
+    input: { rows: 5, value: text, readonly: true },
+    buttons: [{ label: 'Done', value: true }],
+    onOpen: x => { if (x.input) x.input.select(); },
+  });
+  return false;
+}
+const storeApi = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } },
+};
+</script>
+<script>
+const TICKETS = {"S-001":{"h":"5daf43a3188a2242d055ca5b2db29d047f428eb3317e28426753ebc5e272be93","t":"S","p":50,"s":0},"S-002":{"h":"de5167fbfb1c1e48ab0a0c7e8d8bb7ac3bb3b253e4e98ab6e8c1215936d5bc21","t":"S","p":50,"s":0},"S-003":{"h":"0e5efbc590ce3e9d9b6084a524cd65634cf181634d1b0fd3b6dcf61bd52a464e","t":"S","p":50,"s":0},"S-004":{"h":"fe46b951a6ec7df94adbb5f2c42f484f3b8125635f982b529812d7684ad61ecf","t":"S","p":50,"s":0},"S-005":{"h":"b0698331e5bc1c8afe32e31c602d6aabd122b0626c9fda062953085d578c5403","t":"S","p":50,"s":0},"S-006":{"h":"dbe743d7a50d84d997fb6fac80a8692b0f16ea9215f04de52bc4f439d8c3b948","t":"S","p":50,"s":0},"S-007":{"h":"e5bddbea930a5f91d9e5ed8294027588221d762263514ee04483d3ef99457b88","t":"S","p":50,"s":0},"S-008":{"h":"07c2c25315d59104a829450b8a3e03a57219943759d9145397443d4615de9f13","t":"S","p":50,"s":0},"S-009":{"h":"f28f23c43f5c2aad3c3b3db8a2e1c63ebba3d9ef669f466220a662e2a720281b","t":"S","p":50,"s":0},"S-010":{"h":"22bacba41d8c8a1fa2ef3c728b62af140d145507d698f36b08273a231387786f","t":"S","p":50,"s":0},"S-011":{"h":"dfc1ea884265acef7520c894dd8a78267016243ffc0e36c3b4841eef05daa83a","t":"S","p":50,"s":0},"S-012":{"h":"350769fab548c3cc4db5a126c5fff057960658cb638207d218be1b20eec366b1","t":"S","p":50,"s":0},"S-013":{"h":"3b9f8c514b35f61b84f5561f196d13003a1a91cef2b30a75be9e33e51220d6d3","t":"S","p":50,"s":0},"S-014":{"h":"f225c41313882e682e1773ec92423927b0dd73a854a48126bb94e9c9ea7e3c19","t":"S","p":50,"s":0},"S-015":{"h":"4dc243c7eed93f35e9af19c8fcf62f85e3a843951891d73258b12d168ab43574","t":"S","p":50,"s":0},"S-016":{"h":"abcd8c491bd80a9de7dfb5115320bdbfa171b864801d849e7fb9dbf38d35685c","t":"S","p":50,"s":0},"S-017":{"h":"a8754adbed629002cab4794a2d8b82bae9980dc534ffab7a9e7808f910f0f6ee","t":"S","p":50,"s":0},"S-018":{"h":"f981cd6ae6188e0f095cb32b71257bd869aec01bf145101ff91c38ea4cbdb725","t":"S","p":50,"s":0},"S-019":{"h":"5cf3e764c7d01ad68af7939703a05586c62667f75488f60bbdf2afa75305dd66","t":"S","p":50,"s":0},"S-020":{"h":"480276899a9d3970065156e33a25faa69c17c11d5243a537e5ab8eed471f84a5","t":"S","p":50,"s":0},"S-021":{"h":"c1ef04a4a68d5c36e51c9269a6b7aada607361756ae12df20f9ca6c500c7fac1","t":"S","p":50,"s":0},"S-022":{"h":"e6b7be94c61b55d511cede09b91c19ba612c85fe98f9a8ab835026d06c054c58","t":"S","p":50,"s":0},"S-023":{"h":"880e11fd64c1d7bd0df716995c42c2df174ac8b7ee6c075c907f76e2805fc6a5","t":"S","p":50,"s":0},"S-024":{"h":"08ddf27793b3c4c1983c4f3c522744bac42c0d859210b4c212ca9d078412cbcd","t":"S","p":50,"s":0},"S-025":{"h":"3a4165c21d9e09ffc31e25d5dcb0f66205375430601bbd3bbbbd7ac37c854857","t":"S","p":50,"s":0},"S-026":{"h":"5d506a569841c17b7e6e415179327c32a3dea0b47e64828acddeeba48c31ff2e","t":"S","p":50,"s":0},"S-027":{"h":"805a1620b66dc758a1491578c5defcbf2874c51e80931e3d06ff92266f90e5f2","t":"S","p":50,"s":0},"S-028":{"h":"34ca68e47e3a9cd5ed50102b847ce771233a6488f8a9a68070bd9eaa598e0686","t":"S","p":50,"s":0},"S-029":{"h":"a28d74449e71c3e811e11f51ed9f304563c8301a9ccfd157fd3b856e830045bf","t":"S","p":50,"s":0},"S-030":{"h":"6b0052cf07a0aa91950d48b97e491ce4b49b1694f6b9d5ec8905fe0ecdbbf361","t":"S","p":50,"s":0},"S-031":{"h":"362630980ae324312043110b54738c9e869ce6580246732ff748d9c29e6b6862","t":"S","p":50,"s":0},"S-032":{"h":"18688025cf5627d33d680344c4dc9b6c05df6533facd85f897eb971e1eb6b295","t":"S","p":50,"s":0},"S-033":{"h":"73b2c406dc02b9cc1c47efc3d9e4ebfa47bbf3aab4f9ae73f44d7ee133c0c32f","t":"S","p":50,"s":0},"S-034":{"h":"8fcc4f4fbc14ed0e453f1df62ee2c3f1883f9258f9d26949a3ef8c29dc03c674","t":"S","p":50,"s":0},"S-035":{"h":"9cda9b07d3d17a0ae95b30eec8ce683ae5255ef2a08d1d4620a1fb3a1a3e1d8a","t":"S","p":50,"s":0},"S-036":{"h":"93a6c1c971e0817623280833f4ae452268560c438e2117522d9f1eca9f85f584","t":"S","p":50,"s":0},"S-037":{"h":"b3a7af6ed35d5cb019984e7da4cf966f663334ec40dc881aa6dd173c732a42e1","t":"S","p":50,"s":0},"S-038":{"h":"e361ff1461146e0d762562f4c4dc2596727c52edfa143105ef1a7bfe59948953","t":"S","p":50,"s":0},"S-039":{"h":"3a34fdf4df7d3105518d051d51d942184c620edc51d7bc0544278d60f6974b52","t":"S","p":50,"s":0},"S-040":{"h":"9de69f1cc5a6847ea8965e0bacf1d06875ded3be586b5e3ba82a7b8eda25baa8","t":"S","p":50,"s":0},"S-041":{"h":"93927b15f52a0e62fc32d220da8098ce2c0c49550140bb6c95f1bbc5e183f852","t":"S","p":50,"s":0},"S-042":{"h":"9dd092c24bc82e02fcfba7e3c63f34b766d8d0af64ba7293ec01e9f0dc257664","t":"S","p":50,"s":0},"S-043":{"h":"0d81cb0d76224a56b0b2ce28a05f5be01fca4f3c84f8c14f7208ee96a5466887","t":"S","p":50,"s":0},"S-044":{"h":"04b9848aeee4458d5861379bb7b52196499af75269059aa86a2a81219ed0f0ec","t":"S","p":50,"s":0},"S-045":{"h":"b30435ffe3a2d3cc0c224227b1bddf101e973701356048435c8edf1ecdaa13f8","t":"S","p":50,"s":0},"S-046":{"h":"f14bcd45b493dc73e30cf2b7a3864560d10d36010f16e4b3562feae57d611af0","t":"S","p":50,"s":0},"S-047":{"h":"c34fd7295a4930afcd96a885cb9a088de1e3b8652f828bbbab0bc4cf873d7ac0","t":"S","p":50,"s":0},"S-048":{"h":"934b12179b23f5f3f0bcf32b6bc61f878ab90441d42ed8f2055fe4bb9ddbe244","t":"S","p":50,"s":0},"S-049":{"h":"4e86e0d6718b3d0d7540b0a6035e3e226fd749086811fdbe08027b3a0f4f07b8","t":"S","p":50,"s":0},"S-050":{"h":"6cd49637d9827ab4c9e1d15abc78d78c554d16d4aa7233d48f13a7e838465dd5","t":"S","p":50,"s":0},"S-051":{"h":"449569ed657d34ba58b63f0e605679382a0eaa87d6d2fda5316c51b7e00a379d","t":"S","p":50,"s":0},"S-052":{"h":"56d15f04108148b24d4e36a230a00285aebe534bd91913c922857725e4b8ccbf","t":"S","p":50,"s":0},"S-053":{"h":"8341d0469f6251dd8bbc2eb96d2ccca04f7b3024b0509faacee7217bc80be288","t":"S","p":50,"s":0},"S-054":{"h":"206225c0eba2a3dda9db8ecc165b1c99e16fc005cbae87d726973c92a6e9f217","t":"S","p":50,"s":0},"S-055":{"h":"b7ace01ae342f7d638eb4d86647c61a9c64b483ac045b27d80d891a9476de311","t":"S","p":50,"s":0},"S-056":{"h":"f6ed435ef731feb2b1df04f1b41f05bb9185357631c71831a312e4cfe8f6ebe1","t":"S","p":50,"s":0},"S-057":{"h":"53b59e0e9a302ba9d25a5568ccbd3627d219df791587ad3a1fc58f39682a09cc","t":"S","p":50,"s":0},"S-058":{"h":"2e7e35b407c00a0206ab12d53cd63de7c57ab958ece2aefba2d368d39aa1f12b","t":"S","p":50,"s":0},"S-059":{"h":"e7ac83e7e77809152c50dcdae0e4198b50dc27c3d54cff5bbcf2b501c90124d2","t":"S","p":50,"s":0},"S-060":{"h":"ba65b55177230c4ab26812d85094c28d59e323e5d3f1beba810345a1d8834d9a","t":"S","p":50,"s":0},"S-061":{"h":"1d345c066fd8e1aaeab256709c05ee3ac76505aee1b1108531f23cef3df3e34b","t":"S","p":50,"s":0},"S-062":{"h":"600b9db9ee336bba057b0cbbed22ae67fc05edc03b8b5006d66e205e0dc91c89","t":"S","p":50,"s":0},"S-063":{"h":"6fc7aa2caaab6d8b08ecf1be5cc1c7bc4a776b6f92feb7904b65d372db646572","t":"S","p":50,"s":0},"S-064":{"h":"79275f08a4efb76567265ca2ee66d76adce4e54eb5406da049a7d5bc46c67783","t":"S","p":50,"s":0},"S-065":{"h":"99074bee119cd56501e70eb31059c64bb1939fb760bf3112092fba4da70378fd","t":"S","p":50,"s":0},"S-066":{"h":"aa97dc06206e839210bed5d147c6b8677fc4c022f486ce538d1d1c3fa2fcfbc5","t":"S","p":50,"s":0},"S-067":{"h":"2f476d795c9e7cc089c6b72e3773109bed7221e832738ff0b40586e1731d4d10","t":"S","p":50,"s":0},"S-068":{"h":"69981f99a166fe65db9050c05e839d908ba9f6619c5221b279cf862c79354830","t":"S","p":50,"s":0},"S-069":{"h":"1eba799114e2e5c181a9baa3677fe401a585860890a7b617aeb09162c5c634e6","t":"S","p":50,"s":0},"S-070":{"h":"f5c67572f79d4e08403ecaa149202bbc5b22e8fc36e02bdc59ff9025aa9ca4e5","t":"S","p":50,"s":0},"S-071":{"h":"02054d4f9b8ac29ae5625f3ed0c6c726c118dea2e5366c53636ee5cbdaf5c432","t":"S","p":50,"s":0},"S-072":{"h":"b3e49e468926094760f35db4deecb131207285aff3748ec914e4e74901887352","t":"S","p":50,"s":0},"S-073":{"h":"f13a69765806eaf0caa416ac333a5b0201da3c78b81d2a31f457db74fc211421","t":"S","p":50,"s":0},"S-074":{"h":"6b12edd7fd0fa293cb8162931e13634944e51ba48ca591d9addb5fb5b1d6921c","t":"S","p":50,"s":0},"S-075":{"h":"1fdacfd1aa0c3b0f94fcf35cfa16215a50a89b79c155fa682f47e072f7511e7c","t":"S","p":50,"s":0},"S-076":{"h":"0c2b051ca0f29d8df3c1278135a3d792f2865fc8271026fef7ea0f1868c6e2ed","t":"S","p":50,"s":0},"S-077":{"h":"05be67484aa7802da47df86af22aa775d7d79d20c2fceb7389bf7179a9ad198b","t":"S","p":50,"s":0},"S-078":{"h":"0678469fe650d7ef5c5bc7626106a86d36a95c0a11547858664ee18164bcc08b","t":"S","p":50,"s":0},"S-079":{"h":"8fe13b889ce0420d285079162e03970b06b33d228a6eb10b1a5cef80caabf7e3","t":"S","p":50,"s":0},"S-080":{"h":"d3cc9073c4f0ccb9c3ba9fc731e3de7a0127224faa99903b337e467e1c2ddd06","t":"S","p":50,"s":0},"S-081":{"h":"cc7ce1748de1144e1eaf911795be863113032bfa92759be83fa6293c1f4f2d4b","t":"S","p":50,"s":0},"S-082":{"h":"b934d495d79965fc3e940afb52b0399242b16dc4cfbfd5d9968e54bdd90e2018","t":"S","p":50,"s":0},"S-083":{"h":"3219f07bff4c0754de0aea1da73fcf2011e57a06dbcabea87789a49c27ad9a68","t":"S","p":50,"s":0},"S-084":{"h":"d9eb6f1ac411ba694da16b4a96fbad2571a0bddd9f876688f0be8adce46bdda9","t":"S","p":50,"s":0},"S-085":{"h":"1f07eea9fdacfa2b65914772cdaddb19681135210dbe6b39a3f3eb2a508c952d","t":"S","p":50,"s":0},"S-086":{"h":"a8605eaacb143dfe625aa40ddadeb58bb8286938b92d9e152e01b0f6e4d6cd88","t":"S","p":50,"s":0},"S-087":{"h":"3e7bd94df0d03e4fb81f330e8ebfea1e364354d7fcc4e243eddd8c02a787986c","t":"S","p":50,"s":0},"S-088":{"h":"8ec31d37885611576aa3984bdf63ae87799fc41ac1c67870a88723515af2e24a","t":"S","p":50,"s":0},"S-089":{"h":"43348e008b1dcd4d6dcea88239b7536c8cc7a8718b2f9650ed2ed6ba1288bf4d","t":"S","p":50,"s":0},"S-090":{"h":"516853ce3c8b06cd1f25e558526d2895c76f50316872e9fa3cd254aa9e311498","t":"S","p":50,"s":0},"S-091":{"h":"27aec624211adb936af9d7b30bbabae24511760054ae47084af7e725905d2ff9","t":"S","p":50,"s":0},"S-092":{"h":"677b78d2bf348041015bf85fdc91324306e95ace29fe94d13367783c2a152a35","t":"S","p":50,"s":0},"S-093":{"h":"ebb6ccd6795c50705c7c1419c18307345bf5ba4e3ae6d0842e00902be242ba95","t":"S","p":50,"s":0},"S-094":{"h":"6346c675c49d1b615b765f7417966ddcd2da8a7222fd1720474291fb53a1b43a","t":"S","p":50,"s":0},"S-095":{"h":"d83ddf7f04fd906d5f3e687bd0448418f510dda56a6a48319dc51e074da611de","t":"S","p":50,"s":0},"S-096":{"h":"98adf63323f43e23b9a41843f916d209888e1bcedf3093f0844020ba8743490e","t":"S","p":50,"s":0},"S-097":{"h":"1173397d19a989c7a47b70f65391cb1f6f44aa5a0e5b6facbfcf30eab1f1cab1","t":"S","p":50,"s":0},"S-098":{"h":"ca5fa55bdfdfe055813189528f096aec08ff576d4f7927585936fef574375b44","t":"S","p":50,"s":0},"S-099":{"h":"06eb35475577916e3039a463f3fb7b28859e9836e9b37cb7f7daa87f9ad06265","t":"S","p":50,"s":0},"S-100":{"h":"2aca12a6929f77bcb2660137164cc95fe4e4e6bb0bb0d0f008e43d7f73c00e29","t":"S","p":50,"s":0},"S-101":{"h":"edd120440449baef7fe5c08e473810cd9b2921fae99f00a631b041210b54a9ed","t":"S","p":50,"s":0},"S-102":{"h":"260eadd68b56a30ce927882256a02d49af9793cad0b471390578b6b3b0054ca8","t":"S","p":50,"s":0},"S-103":{"h":"9aef11186d5c739aab3040df7528e29eea3dfecb79675a16f60a8e4cbe8e043f","t":"S","p":50,"s":0},"S-104":{"h":"da59036adb8d708bebd1fcee93d2c159a15a91863d6c732e8309b80f9018918e","t":"S","p":50,"s":0},"S-105":{"h":"1efe6393f0e066e46dbf807a100e96eca0c5492d281c01bfd2aeccf4f59e2a54","t":"S","p":50,"s":0},"S-106":{"h":"79871828ea40b2c0abd271f17b8e2812ce83f3257d3a0633532f9e5f8dfc20e1","t":"S","p":50,"s":0},"S-107":{"h":"ab7d6b09c66f68e1c61ff81c3748ed4e49db10d3f733376fd56775b05354c770","t":"S","p":50,"s":0},"S-108":{"h":"9c63abc7d588d489b5eea049e86a1901961b8741aff64ca91ac6653df8e62c1a","t":"S","p":50,"s":0},"S-109":{"h":"a9cb2cbdbf9db6f5615ed23af93a29e537b91754eb6bd2490e04fea37d503331","t":"S","p":50,"s":0},"S-110":{"h":"9f81b9b09b33db0244d5cbf6a39fe58382a79d00acec3ea0ebaad9e59d1863ed","t":"S","p":50,"s":0},"S-111":{"h":"e116cf064a4be7ed02dff4c290d67aed5de531d501eeef5308a18a32688e89de","t":"S","p":50,"s":0},"S-112":{"h":"b4dc50aeae5f41afce6837ef44bb89f72eef1cb928158f3801e36e0e8cf6bf0f","t":"S","p":50,"s":0},"S-113":{"h":"72af4b3b601b90f01298fee02b99181b5e9be98a87429a6e4d6a786524ae68ed","t":"S","p":50,"s":0},"S-114":{"h":"1dd1132dc9dc6a3c09fd3845db59a011cf98cc312a6dab3c67aef388918f100b","t":"S","p":50,"s":0},"S-115":{"h":"939ecb583ba9738ace98442d0b20fa99ca6e31cc787699a08c30b7d01bac099d","t":"S","p":50,"s":0},"S-116":{"h":"f6d3e10768789f20435ec8e7fdae1943b9d2ae48437b4bb90d0c95e90b9a8a2c","t":"S","p":50,"s":0},"S-117":{"h":"d5cd6cd0e0fb656a8b373e93d8770b7571c4e2d07eb22263f64d7279328546a5","t":"S","p":50,"s":0},"S-118":{"h":"7abf3d41c4d50cc726e64eebd17cd98d1ad139eaebe86d21b320c21b2d46c51c","t":"S","p":50,"s":0},"S-119":{"h":"4deea81bcf45e16874a7ca8e2af93f704f23beeec125f2c674e76a436e03b012","t":"S","p":50,"s":0},"S-120":{"h":"d00a92036b87ffcbeb63617b45b745a7ef9e17dfb8b2bd558b7b0cd6ea983474","t":"S","p":50,"s":0},"D-001":{"h":"f722f44bddbbe8183df50aea0242984147fb469e84f5fdf201f609bb9eba2554","t":"D","p":80,"s":0},"D-002":{"h":"d49a0e8891bc04c277d849a602245cb1581c6e6864333f5db26bdd95c325f422","t":"D","p":80,"s":0},"D-003":{"h":"8da82e587181423e34467e775cb0c2a6e9a43a6b22ea6576df09edda38289a25","t":"D","p":80,"s":0},"D-004":{"h":"2c6de2c07e93c228e3d9a652822f81efa3e585acb23618b8fc812331e4c20a37","t":"D","p":80,"s":0},"D-005":{"h":"190add711158f9f6db284932b4006e0246f853280f50f481af2c421c6e12d2ec","t":"D","p":80,"s":0},"D-006":{"h":"dc74faa87bad6cf98d070b8031f17b526cfd51be0917e7efb7a6c22205ccc767","t":"D","p":80,"s":0},"D-007":{"h":"95e0c5b08820c4ca343e79bed954305f17e206034ed1b8b4f7b71a9815b4fc8a","t":"D","p":80,"s":0},"D-008":{"h":"007ebe7578ecad42754d98116647e2317c3e6cd212e88f8bf8cbe74157aaa6cb","t":"D","p":80,"s":0},"D-009":{"h":"7ffe92f592c616955f89878d18260a3121208e6f06b4cedbbe8cba18c01fd3c7","t":"D","p":80,"s":0},"D-010":{"h":"65e376e988ca9bdd23d07c413f14f8ae42aa983fc11570d947af0c6d0d5cbb26","t":"D","p":80,"s":0},"D-011":{"h":"d5bb863f1b2c3ce22c3d12e6e9bd5031ce8db08e4eadecd6e5778f70ce0f95ee","t":"D","p":80,"s":0},"D-012":{"h":"5bb535c89eae5f344ebf3e51a9ed84d1e1bc6eb20f37f282a6579b4b782d1e3c","t":"D","p":80,"s":0},"D-013":{"h":"b4320f601b813c24259c9a4ee15667e94135f88e0e171fddad09c77154cd2f4e","t":"D","p":80,"s":0},"D-014":{"h":"81f2f165fe8cae3753ed4fd77edd73062186e4de777683ec572c74233e873ee8","t":"D","p":80,"s":0},"D-015":{"h":"c27c0f2ad27480f7664a180df150185d7316cf391f83d6d4ba4179d91f56fef9","t":"D","p":80,"s":0},"D-016":{"h":"777058f1dc4433855e6d8ef4953062b658e47d899595e6f058ace9128eb89dce","t":"D","p":80,"s":0},"D-017":{"h":"1980ac40986a8608149ff7e6de2c602c1537343d3653f77a23b131836885028a","t":"D","p":80,"s":0},"D-018":{"h":"21d5d4ab9e254640ddfa7a2f9faeb8918cb760b18d0d6137a20fafe8491aae3d","t":"D","p":80,"s":0},"D-019":{"h":"03ab3086a79d6ffbd233a0b36c9c8b93cc3bb53ced80fd9aaef9b39ee29319d0","t":"D","p":80,"s":0},"D-020":{"h":"3242eef5f6560838f5bb6f37bb2cd6cb67167c0ed1a9738640831edaaab8fe1d","t":"D","p":80,"s":0},"D-021":{"h":"738c482259fffd31cd02bcad03805f097b3e544632a8af4316ff6626ee1e36c8","t":"D","p":80,"s":0},"D-022":{"h":"8a5013e24f1aa1041256ec28fbd74fd3c90fc8acaf4ad5c3d7ba30572fc70a69","t":"D","p":80,"s":0},"D-023":{"h":"9dcbd9d187da70de7ff2a475dfd95deef998625a689cbd2754561713d5c8b91b","t":"D","p":80,"s":0},"D-024":{"h":"c841244b65a388e6c9015bc0e7fbc04ce186b80fae9a395cce7548d7ec61a5d2","t":"D","p":80,"s":0},"D-025":{"h":"e149315493515e44dd4df2eb941d1b8e7e25cadf250a82b309cb1fe86eecca21","t":"D","p":80,"s":0},"D-026":{"h":"5cdaa8e4915f9f067c7bd215b52914a32dbbcff9f5e336bf145c3791ea8f2d23","t":"D","p":80,"s":0},"D-027":{"h":"1569ec58ea3a3a4ae530b6b43a9dce4bd0e8b9302866df16852fb1bef460fd93","t":"D","p":80,"s":0},"D-028":{"h":"824a52e05a6a1a69a7e565e1a6c81344e36481dd359c1b539dc8a3f1212373b1","t":"D","p":80,"s":0},"D-029":{"h":"abcf41f721a3a9794ebc06f7ae6d3e3ab4fd6f2560527ec8f7908434c22b7fbf","t":"D","p":80,"s":0},"D-030":{"h":"341f104773f1e316a2d13d6c7940c7b10211610553c1b0af3f1e713111cb73f0","t":"D","p":80,"s":0},"D-031":{"h":"c33d9fe06dac7a40cce232b928eea27ba43a764cc8eafa2e68d466d765e76fbb","t":"D","p":80,"s":0},"D-032":{"h":"2dc2fbce21cd3fe61deb46d4209dec8ba769d2de24d79908ca4fd5da6584536a","t":"D","p":80,"s":0},"D-033":{"h":"001104562c92aab295d49c7a1f9282f689ed15e222f6749ff4aad741c59c2d49","t":"D","p":80,"s":0},"D-034":{"h":"954076fc73f61dab5a0fefd62e6ab79f3ee4037a06667adc6caa269282740096","t":"D","p":80,"s":0},"D-035":{"h":"e0e237d04880e240e88f8ac79902e39f4a4ec88da951f01d3a07c15b6c90395f","t":"D","p":80,"s":0},"D-036":{"h":"5cd4f9314c5f1b0364997dbdca48ed93568234dd9e9b4633e0aaed642b9ea5c3","t":"D","p":80,"s":0},"D-037":{"h":"5a15a78c2fc6e823d900f8bf567ef191baacdee3afcbbc137c37769f9d2c5dfd","t":"D","p":80,"s":0},"D-038":{"h":"855a706014cffd251391b20e6dc921a258e8fd35afa94ec52878126c1c14e9ce","t":"D","p":80,"s":0},"D-039":{"h":"b1c9845e3da9d235558ef887ffe21c3bd2f9a2cc6bc1f264ac6e0fffd83e62e1","t":"D","p":80,"s":0},"D-040":{"h":"1cb601233887b15f44c8db6c494537236090ad265242817b0ee74d0899fb452d","t":"D","p":80,"s":0},"D-041":{"h":"35f29660dc30d6a79e8c7fc9b0c94486920fe0ab7155e4646913e6681167374c","t":"D","p":80,"s":0},"D-042":{"h":"a732935dac6ccfd9042939e20833f1185f3663c11e75b85a6c5fdf5537ac5ad8","t":"D","p":80,"s":0},"D-043":{"h":"c6faabe7b784910b11a7993e361487281d580235a92a726e08af499e0da71717","t":"D","p":80,"s":0},"D-044":{"h":"7716fe1b33d4e762f6ccd78ede3d9a4359d82fbf8adb88cead87629daed7af0c","t":"D","p":80,"s":0},"D-045":{"h":"6bd99f9030f34f92b8b637d95d3360485f1be1e22489fb46950af0a40e489ed1","t":"D","p":80,"s":0},"D-046":{"h":"2d677c14e22193dcbb08329c9d940715a1fb294df590b35d28dea63797a347fa","t":"D","p":80,"s":0},"D-047":{"h":"bb302eb54a804ebb0eb460b1b251b4dc0afbff431cb573b299d885522ddc6d72","t":"D","p":80,"s":0},"D-048":{"h":"e4ffab2a9a95b9ae83d6c0a8e75724b30e51e8b7066b0b90b4a3f19ccadcacca","t":"D","p":80,"s":0},"D-049":{"h":"fbfd9f5d6a7777c30c893a1f4b9a98dd674dace811b3a5214a731985407d5159","t":"D","p":80,"s":0},"D-050":{"h":"ed3d432de65e0dee1ce2ff087f11d7fa6d2730a8e42f8e3e1c683f4c79504578","t":"D","p":80,"s":0},"D-051":{"h":"bcee1d4e20c97703e826a674ad2b680bb8dc8daff2b21f96eacc44572fd034ab","t":"D","p":80,"s":0},"D-052":{"h":"5df8da4df15d4e247437c57277aeb86b1dbb7e54118c367653c635d801beeedf","t":"D","p":80,"s":0},"D-053":{"h":"133a88f2b148bf94d344336c709e753c9636c97e600befcc00584d6e947a2cf3","t":"D","p":80,"s":0},"D-054":{"h":"cb7caa23a63ebf315d7e45a76d6ec1e6c591a7fead9befeae507f65aa575cf85","t":"D","p":80,"s":0},"D-055":{"h":"71619ce5f41d1f63ef001116ec3599c026896ee38f098e184e20f32f474abdd5","t":"D","p":80,"s":0},"D-056":{"h":"a92e7564291f61e6ed44b86e9007ab644881d6bdaebdd7c68fadab9425573576","t":"D","p":80,"s":0},"D-057":{"h":"5ed237c9f8619444e902e34a973fdd9cd3ba11770f9858dc0568d6dd7988e424","t":"D","p":80,"s":0},"D-058":{"h":"5d742c96ed2511a2b8f54f4e96e09b975f18442f684e78eca70c0ac6e4d1e07f","t":"D","p":80,"s":0},"D-059":{"h":"26e0d341b5780208c2c20ba82c1d5278f6bb731b5e331ca2e7cfbbe30f597367","t":"D","p":80,"s":0},"D-060":{"h":"ba6ea6af9245fe84dd5b765cbac0dac239f027a402a7846cd7e135ec06dc4922","t":"D","p":80,"s":0},"D-061":{"h":"9c70ece02fb2ccdd13e01140bf84c3b7d2a5acee85f0041128ff1ee1febbcfa9","t":"D","p":80,"s":0},"D-062":{"h":"b1537e35145d1abe07f3237776e25eef1e94e700f377da7f948af7fd08e8e184","t":"D","p":80,"s":0},"D-063":{"h":"9156a8ee6817830a515286138110142ea118ac8f6ba386c0ddefcd40ade2112f","t":"D","p":80,"s":0},"D-064":{"h":"da914eb3b65159e3b8f29ab44436916261e2962858b1295768407549ef0d1be6","t":"D","p":80,"s":0},"D-065":{"h":"7013a5ef15740bdd563740a3ac151aa67c101cf389a25fdc9823fd06d4a49155","t":"D","p":80,"s":0},"D-066":{"h":"c7d507ff7b441cd19b7cde40f83266289ef523ac7fcf7d05fc28e5f8ae28594d","t":"D","p":80,"s":0},"D-067":{"h":"59ccd4763902255bd7c0dfc8a1249ea73130669e6c6df9ae24695aae7effc3cb","t":"D","p":80,"s":0},"D-068":{"h":"f48f452ff3d7c5d7ca159ffa3516a499ef5ad6778317efe0c135b9f26eb78215","t":"D","p":80,"s":0},"D-069":{"h":"583d70ec0071b8b4f1e2e2ddae45871b426fed08fc9aec55851867ec138889f7","t":"D","p":80,"s":0},"D-070":{"h":"80e7ce8ffd3936f46a2515d45751d2f65695609e9b8f8aad3d1d35b83a4379d7","t":"D","p":80,"s":0},"D-071":{"h":"e28551b6248abf4efb7ea80e0058b5c1277517d5b97bd365fbcfd36ff05591cd","t":"D","p":80,"s":0},"D-072":{"h":"ada38a36c09830ae4dd05ce8ffa7ca1c633b319092f4decbc513e1a85aa86c8e","t":"D","p":80,"s":0},"D-073":{"h":"71bda6178210d7ed076bfc8125bacb3a8e7012ccd2f5d2019d3a2e46baa12c26","t":"D","p":80,"s":0},"D-074":{"h":"cc2c65d0bf792b329187656711d8ccd91eff83e658095ea92fabcc23d96d2071","t":"D","p":80,"s":0},"D-075":{"h":"5a605416b2c2b8708f9786dd9d48e1a961d6c105c691a25d43d426ef168f2885","t":"D","p":80,"s":0},"D-076":{"h":"dfdefd3d5e5ee2969882b281016d162b42264973b4d9967df259d85e5ee434f6","t":"D","p":80,"s":0},"D-077":{"h":"6ef5244d84bd07c7a9c168bd5422a212fca1cb838be92d6da5e92eee721a3279","t":"D","p":80,"s":0},"D-078":{"h":"6cf1e4367f5fa16d98171bfca6f277e0d982e23fa0f1448c9f3169fa11d80d41","t":"D","p":80,"s":0},"D-079":{"h":"4c71b4b16513fdb83b4d827f02b40d859116518e7dee2b8b5d098b4ba50bdf02","t":"D","p":80,"s":0},"D-080":{"h":"9c72e273b0630ddb4c52a12dfb78101df79f7d5e9881b4311c672fdf0cdf17ca","t":"D","p":80,"s":0}};      // serial -> { h: proof of signature, t: S|D, p: price, s: sold when page was built }
+const EVENT_NAME = "RÜVA · BLUE HOUR VOL. 01";
+const BUILT = "08 Oct 20:02";
+
+const $ = id => document.getElementById(id);
+$('evt').textContent = EVENT_NAME;
+$('builtNote').textContent = 'Ticket list built ' + BUILT + '. Sales are saved on this phone only, so use the same phone and browser each time.';
+
+/* ---------- saved state ---------- */
+let sales = storeApi.get('ruva_sell', {});   // serial -> { st, t, buyer, phone, seller, pay, amt }
+let warnedStorage = false;
+function persist() {
+  if (!storeApi.set('ruva_sell', sales) && !warnedStorage) {
+    warnedStorage = true;
+    UI.modal({ tone: 'warn', title: 'Cannot save on this phone', body: 'This browser is blocking storage (private mode?). Your sales will be lost if you close the page. Copy the sales code often.' });
+  }
+}
+const isSold = s => { const x = sales[s]; return x ? x.st === 1 : !!TICKETS[s].s; };
+const priceOf = s => TICKETS[s].p;
+const amountOf = s => { const x = sales[s]; return x && x.amt != null ? x.amt : priceOf(s); };
+const money = n => 'GH₵' + (Math.round(n * 100) / 100);
+
+let payMethod = 'cash', amtTouched = false;
+$('seller').value = storeApi.get('ruva_seller', '');
+
+/* ---------- tabs ---------- */
+$('tabs').addEventListener('click', e => {
+  const b = e.target.closest('button[data-tab]'); if (!b) return;
+  for (const x of $('tabs').children) x.classList.toggle('on', x === b);
+  for (const t of ['sell', 'sales', 'share']) $('tab-' + t).hidden = t !== b.dataset.tab;
+  if (b.dataset.tab === 'sales') renderSales();
+});
+
+/* ---------- numbers at the top ---------- */
+function refresh() {
+  let sold = 0, left = { S: 0, D: 0 }, soldMoney = 0;
+  for (const k in TICKETS) {
+    if (isSold(k)) { sold++; soldMoney += amountOf(k); } else left[TICKETS[k].t]++;
+  }
+  $('sSold').textContent = sold;
+  $('sMoney').textContent = Math.round(soldMoney * 100) / 100;
+  $('sLeft').textContent = left.S + left.D;
+  $('sLeftDetail').textContent = left.S + ' single · ' + left.D + ' double';
+}
+
+/* ---------- Sell tab ---------- */
+function showInfo() {
+  const s = normSerial($('serial').value), el = $('info');
+  if (!$('serial').value.trim()) { el.className = 'info'; el.textContent = ''; return; }
+  if (!s || !TICKETS[s]) { el.className = 'info bad'; el.textContent = 'No ticket with that serial'; return; }
+  const t = TICKETS[s];
+  if (isSold(s)) {
+    const r = sales[s] || {};
+    el.className = 'info warn';
+    el.textContent = s + ' · ' + typeName(t.t) + ' · already sold' + (r.buyer ? ' to ' + r.buyer : '');
+    return;
+  }
+  el.className = 'info ok';
+  el.textContent = s + ' · ' + typeName(t.t) + ' · ' + money(t.p) + ' · available';
+  if (!amtTouched) $('amt').value = t.p;
+}
+$('serial').addEventListener('input', showInfo);
+$('serial').addEventListener('blur', () => { const s = normSerial($('serial').value); if (s) { $('serial').value = s; showInfo(); } });
+$('amt').addEventListener('input', () => { amtTouched = true; });
+$('seller').addEventListener('change', () => storeApi.set('ruva_seller', $('seller').value.trim()));
+$('pay').addEventListener('click', e => {
+  const b = e.target.closest('button[data-pay]'); if (!b) return;
+  payMethod = b.dataset.pay;
+  for (const x of $('pay').children) x.classList.toggle('on', x === b);
+});
+
+function setSerial(s) {
+  $('serial').value = s; amtTouched = false; showInfo();
+  (s && !isSold(s) ? $('buyer') : $('serial')).focus();
+}
+
+async function scanTicket() {
+  const video = document.createElement('video');
+  video.setAttribute('playsinline', ''); video.muted = true;
+  let ctrl = null, closed = false, handled = false;
+  const m = UI.modal({
+    tone: 'info', icon: '▣', title: 'Scan the ticket',
+    body: 'Point the camera at the QR code on the ticket you are selling.',
+    node: video,
+    buttons: [{ label: 'Cancel', value: false, kind: 'ghost' }],
+    onClose: () => { closed = true; if (ctrl) ctrl.stop(); },
+  });
+  try {
+    ctrl = await QRCam.start(video, async text => {
+      if (handled) return;
+      const q = parseQR(text);
+      if (!q) return;                                        // not one of our tickets: keep looking
+      handled = true; m.close('scan');
+      const t = TICKETS[q.serial];
+      if (!t || sha256(q.serial + '|' + q.sig) !== t.h) {
+        await UI.modal({ tone: 'bad', icon: '✕', title: 'Fake or damaged ticket', body: 'This QR code is <b>not valid</b>. Do not sell this ticket.' });
+        return;
+      }
+      setSerial(q.serial);
+    });
+    if (closed) ctrl.stop();
+  } catch (e) {
+    m.close('error');
+    UI.modal(QRCam.errorPopup(e.code));
+  }
+}
+$('scanBtn').onclick = scanTicket;
+
+async function sell() {
+  const serial = normSerial($('serial').value);
+  const t = TICKETS[serial];
+  if (!serial || !t) {
+    UI.modal({ tone: 'warn', title: 'Which ticket?', body: 'Type the serial printed on the ticket, like <b>S-014</b> or <b>D-007</b>, or tap <b>Scan QR</b>.' });
+    return;
+  }
+  if (isSold(serial)) {
+    const r = sales[serial] || {};
+    UI.modal({ tone: 'warn', title: 'Already sold',
+      body: '<b>' + esc(serial) + '</b> was already marked as sold' + (r.buyer ? ' to <b>' + esc(r.buyer) + '</b>' : '') + (r.seller ? ' by ' + esc(r.seller) : '') + (r.t ? ' (' + esc(fmtMin(r.t)) + ')' : '') + '.<br>Do not give it to someone else.' });
+    return;
+  }
+  const seller = $('seller').value.trim();
+  if (!seller) { UI.modal({ tone: 'warn', title: 'Who is selling?', body: 'Type your name in the <b>Seller</b> box.' }); $('seller').focus(); return; }
+  const amtRaw = $('amt').value.trim(), amt = Number(amtRaw);
+  if (amtRaw === '' || !isFinite(amt) || amt < 0) { UI.modal({ tone: 'warn', title: 'How much was paid?', body: 'Type the amount paid in <b>Amount paid</b>.' }); $('amt').focus(); return; }
+  const buyer = $('buyer').value.trim(), phone = $('phone').value.trim();
+  const ok = await UI.confirm({
+    title: 'Sell this ticket?',
+    body: '<b>' + esc(serial) + '</b> · ' + typeName(t.t) + '<br><b>' + money(amt) + '</b> by ' + (payMethod === 'momo' ? 'MoMo' : 'cash') +
+          (amt !== t.p ? ' <span style="color:#f0b94a">(price is ' + money(t.p) + ')</span>' : '') +
+          '<br>Buyer: ' + esc(buyer || '-') + (phone ? ' · ' + esc(phone) : '') + '<br>Seller: ' + esc(seller),
+    yes: 'Yes, sold',
+  });
+  if (!ok) return;
+  sales[serial] = { st: 1, t: Sales.nowMin(), buyer, phone, seller, pay: payMethod, amt };
+  persist(); storeApi.set('ruva_seller', seller);
+  $('serial').value = ''; $('buyer').value = ''; $('phone').value = ''; $('amt').value = ''; amtTouched = false; showInfo();
+  refresh(); renderSales();
+  await UI.modal({ solid: true, tone: 'ok', icon: '✓', title: 'SOLD',
+    body: '<b>' + esc(serial) + '</b> · ' + typeName(t.t) + ' · ' + money(amt), autoClose: 1600, backdropClose: true,
+    buttons: [{ label: 'Next ticket', value: true }] });
+  $('serial').focus();
+}
+$('sellBtn').onclick = sell;
+
+/* ---------- Sales tab ---------- */
+function rows() {
+  return Object.keys(sales).filter(k => TICKETS[k]).map(k => Object.assign({ serial: k }, sales[k])).sort((a, b) => b.t - a.t);
+}
+function renderSales() {
+  const all = rows(), sold = all.filter(r => r.st === 1);
+  // totals per seller
+  const by = {};
+  for (const r of sold) {
+    const k = r.seller || (r.imp ? '(other phone)' : '(no name)');
+    const x = by[k] || (by[k] = { n: 0, tot: 0, cash: 0, momo: 0 });
+    const a = amountOf(r.serial);
+    x.n++; x.tot += a;
+    if (r.pay === 'cash') x.cash += a; else if (r.pay === 'momo') x.momo += a;
+  }
+  const names = Object.keys(by).sort();
+  $('byseller').innerHTML = names.length
+    ? '<table><tr><th>Seller</th><th class="n">Sold</th><th class="n">Cash</th><th class="n">MoMo</th><th class="n">Total</th></tr>' +
+      names.map(k => '<tr><td>' + esc(k) + '</td><td class="n">' + by[k].n + '</td><td class="n">' + by[k].cash + '</td><td class="n">' + by[k].momo + '</td><td class="n"><b>' + by[k].tot + '</b></td></tr>').join('') + '</table>'
+    : '<div class="empty" style="padding:6px">No sales yet</div>';
+  // list
+  const q = $('search').value.trim().toLowerCase();
+  const shown = all.filter(r => !q || [r.serial, r.buyer, r.seller, r.phone].join(' ').toLowerCase().includes(q));
+  $('list').innerHTML = shown.length ? shown.map(r => {
+    const t = TICKETS[r.serial];
+    const who = r.imp ? 'From another phone' : (esc(r.buyer || 'No name') + (r.phone ? ' · ' + esc(r.phone) : ''));
+    return '<div class="item' + (r.st === 1 ? '' : ' void') + '"><div class="s">' + esc(r.serial) + '<small>' + typeName(t.t) + '</small></div>' +
+      '<div class="m">' + who + '<small>' + esc(r.seller || '') + (r.seller ? ' · ' : '') + esc(fmtMin(r.t)) + (r.pay ? ' · ' + (r.pay === 'momo' ? 'MoMo' : 'cash') : '') + '</small></div>' +
+      '<div class="r">' + (r.st === 1 ? money(amountOf(r.serial)) + '<button class="ghost" data-void="' + esc(r.serial) + '">Cancel sale</button>' : '<small style="color:var(--mute)">Cancelled</small>') + '</div></div>';
+  }).join('') : '<div class="empty">' + (q ? 'Nothing matches your search' : 'Sold tickets will show here') + '</div>';
+}
+$('search').addEventListener('input', renderSales);
+$('list').addEventListener('click', async e => {
+  const b = e.target.closest('button[data-void]'); if (!b) return;
+  const serial = b.dataset.void, r = sales[serial];
+  const ok = await UI.confirm({
+    tone: 'bad', icon: '?', title: 'Cancel this sale?',
+    body: '<b>' + esc(serial) + '</b>' + (r.buyer ? ' sold to ' + esc(r.buyer) : '') + ' will be marked <b>not sold</b> and can be sold again.',
+    yes: 'Yes, cancel sale', danger: true,
+  });
+  if (!ok) return;
+  r.st = 0; r.t = Math.max(Sales.nowMin(), r.t + 1);
+  persist(); refresh(); renderSales();
+  UI.modal({ tone: 'ok', title: 'Sale cancelled', body: 'Send your sales code to the gate again so they know <b>' + esc(serial) + '</b> is no longer sold.' });
+});
+
+/* ---------- Share tab ---------- */
+$('copyBtn').onclick = async () => {
+  if (!Object.keys(sales).length) { UI.modal({ tone: 'info', title: 'Nothing to share yet', body: 'Mark at least one ticket as sold first.' }); return; }
+  const ok = await copyText(Sales.encode(sales), 'Send this to whoever runs the gate.');
+  if (ok) UI.modal({ tone: 'ok', title: 'Copied', body: 'Paste it into WhatsApp and send it to the gate. They use <b>Load sales</b> in the scanner.' });
+};
+$('importBtn').onclick = async () => {
+  const r = await UI.modal({
+    tone: 'info', icon: '⇩', title: 'Load sales code',
+    body: 'Paste a sales code from another seller to see their tickets as sold here too.',
+    input: { rows: 6, placeholder: 'RUVA1|S-001:1:...' },
+    buttons: [{ label: 'Cancel', value: false, kind: 'ghost' }, { label: 'Load', value: true }],
+  });
+  if (r.value !== true) return;
+  if (!r.text.trim()) { UI.modal({ tone: 'warn', title: 'Nothing pasted', body: 'Paste the sales code first.' }); return; }
+  const d = Sales.decode(r.text);
+  if (!d.ok) {
+    UI.modal({ tone: 'bad', title: d.why === 'damaged' ? 'Code is damaged' : 'Not a sales code',
+      body: d.why === 'damaged' ? 'Part of the text is missing or changed. Ask them to copy and send it again.' : 'That does not look like a sales code. It starts with <b>RUVA1|</b>.' });
+    return;
+  }
+  const m = Sales.merge(sales, d.recs, TICKETS);
+  persist(); refresh(); renderSales(); showInfo();
+  UI.modal({ tone: 'ok', title: 'Sales loaded', body: '<b>' + m.added + '</b> newly sold' + (m.voided ? ' · <b>' + m.voided + '</b> cancelled' : '') + '<br>' + m.same + ' already known' + (m.unknown ? '<br>' + m.unknown + ' not from this event (ignored)' : '') });
+};
+$('csvBtn').onclick = () => {
+  const all = rows().slice().sort((a, b) => a.t - b.t);
+  if (!all.length) { UI.modal({ tone: 'info', title: 'Nothing to download', body: 'No sales yet.' }); return; }
+  const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const out = [['serial', 'type', 'status', 'amount_ghs', 'paid_by', 'buyer', 'phone', 'seller', 'time'].join(',')];
+  for (const r of all) {
+    out.push([r.serial, typeName(TICKETS[r.serial].t), r.st === 1 ? 'sold' : 'cancelled', r.st === 1 ? amountOf(r.serial) : '', r.pay || '', q(r.buyer), q(r.phone), q(r.seller || (r.imp ? 'other phone' : '')), new Date(r.t * 60000).toISOString()].join(','));
+  }
+  downloadText('ruva_sales.csv', '﻿' + out.join('\n'), 'text/csv');
+};
+$('eraseBtn').onclick = async () => {
+  const r = await UI.modal({
+    tone: 'bad', title: 'Erase all sales?',
+    body: 'This deletes every sale recorded on this phone. Download the CSV first. Type <b>ERASE</b> to confirm.',
+    input: { placeholder: 'ERASE', upper: true },
+    buttons: [{ label: 'Cancel', value: false, kind: 'ghost' }, { label: 'Erase', value: true, kind: 'danger' }],
+  });
+  if (r.value !== true) return;
+  if (r.text.trim().toUpperCase() !== 'ERASE') { UI.modal({ tone: 'warn', title: 'Not erased', body: 'You need to type <b>ERASE</b> exactly.' }); return; }
+  sales = {}; persist(); refresh(); renderSales(); showInfo();
+  UI.modal({ tone: 'ok', title: 'Sales erased' });
+};
+
+refresh(); renderSales();
+</script>
+</body>
+</html>

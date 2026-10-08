@@ -1,0 +1,20 @@
+{
+  "S": {
+    "png": "assets/ticket_single.png",
+    "w": 1207,
+    "h": 366,
+    "qr_cx": 1070.5,
+    "qr_cy": 217.5,
+    "qr_size": 147,
+    "serial_y": 341
+  },
+  "D": {
+    "png": "assets/ticket_double.png",
+    "w": 1206,
+    "h": 359,
+    "qr_cx": 1070.0,
+    "qr_cy": 207.5,
+    "qr_size": 144,
+    "serial_y": 328
+  }
+}

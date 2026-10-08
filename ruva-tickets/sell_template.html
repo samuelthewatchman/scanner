@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RUVA Sell</title>
+<style>
+  :root { --bg:#0b0b0b; --card:#161616; --line:#2a2a2a; --text:#f2f2f2; --mute:#8d8d8d; --gold:#c8a04a;
+          --ok:#1fa75a; --bad:#d23b3b; --warn:#d99a1d; --blue:#4aa3ff; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { padding: 12px 14px calc(30px + env(safe-area-inset-bottom)); max-width: 520px; margin: 0 auto; }
+  header { display:flex; align-items:baseline; justify-content:space-between; padding: 6px 2px 12px; }
+  header h1 { margin:0; font-size:20px; letter-spacing:.12em; }
+  header h1 span { color:var(--gold); }
+  header small { color:var(--mute); font-size:11px; text-align:right; }
+  .stats { display:grid; grid-template-columns: repeat(3,1fr); gap:8px; margin-bottom:12px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 6px; text-align:center; }
+  .stat b { display:block; font-size:22px; }
+  .stat span { font-size:11px; color:var(--mute); letter-spacing:.06em; text-transform:uppercase; }
+  .stat em { display:block; font-style:normal; font-size:11px; color:var(--mute); margin-top:2px; }
+  .tabs { display:grid; grid-template-columns: repeat(3,1fr); gap:6px; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:5px; margin-bottom:14px; }
+  .tabs button { background:transparent; color:var(--mute); padding:10px 4px; border-radius:10px; font-weight:700; }
+  .tabs button.on { background:var(--gold); color:#111; }
+  button { font:inherit; border:0; border-radius:12px; padding:12px 16px; background:var(--gold); color:#111; font-weight:700; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--text); border:1px solid var(--line); font-weight:600; }
+  button.danger { background:var(--bad); color:#fff; }
+  button.big { width:100%; padding:16px; font-size:17px; margin-top:6px; }
+  label { display:block; font-size:12px; color:var(--mute); letter-spacing:.06em; text-transform:uppercase; margin:14px 2px 6px; }
+  input[type=text], input[type=tel], input[type=number], input[type=search] { font:inherit; font-size:16px; padding:13px; border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--text); width:100%; }
+  #serial { text-transform:uppercase; font-size:22px; font-weight:800; letter-spacing:.06em; }
+  .serialrow { display:grid; grid-template-columns: 1fr auto; gap:8px; }
+  .info { min-height:22px; margin:8px 2px 0; font-size:14px; }
+  .info.ok { color:#52d98b; } .info.warn { color:#f0b94a; } .info.bad { color:#ff7a7a; }
+  .two { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+  .seg { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+  .seg button { background:var(--card); color:var(--mute); border:1px solid var(--line); }
+  .seg button.on { background:var(--gold); color:#111; border-color:var(--gold); }
+  .box { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px; margin-bottom:12px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; color:var(--mute); font-weight:600; font-size:11px; letter-spacing:.06em; text-transform:uppercase; padding:4px 6px; }
+  td { padding:7px 6px; border-top:1px solid var(--line); }
+  td.n, th.n { text-align:right; }
+  .list { margin-top:10px; }
+  .item { display:grid; grid-template-columns: auto 1fr auto; gap:10px; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-bottom:8px; }
+  .item .s { font-weight:800; font-size:15px; }
+  .item .s small { display:block; font-weight:600; color:var(--mute); font-size:11px; }
+  .item .m { font-size:13px; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .item .m small { display:block; color:var(--mute); font-size:12px; }
+  .item .r { text-align:right; font-weight:700; }
+  .item .r button { display:block; margin-top:4px; padding:6px 10px; font-size:12px; border-radius:8px; }
+  .item.void { opacity:.55; } .item.void .s { text-decoration:line-through; }
+  .empty { color:var(--mute); text-align:center; padding:22px 8px; font-size:14px; }
+  .stack button { width:100%; margin-bottom:10px; }
+  .note { color:var(--mute); font-size:12px; line-height:1.5; margin:6px 2px 14px; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>R<span>Ü</span>VA · SELL</h1>
+  <small id="evt"></small>
+</header>
+
+<div class="stats">
+  <div class="stat"><b id="sSold">0</b><span>Sold</span></div>
+  <div class="stat"><b id="sMoney">0</b><span>Money GH₵</span></div>
+  <div class="stat"><b id="sLeft">0</b><span>Left</span><em id="sLeftDetail"></em></div>
+</div>
+
+<div class="tabs" id="tabs">
+  <button data-tab="sell" class="on">Sell</button>
+  <button data-tab="sales">Sales</button>
+  <button data-tab="share">Share</button>
+</div>
+
+<!-- ============ SELL ============ -->
+<section id="tab-sell">
+  <label for="serial">Ticket serial</label>
+  <div class="serialrow">
+    <input id="serial" type="text" placeholder="S-014" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text">
+    <button id="scanBtn" class="ghost">Scan QR</button>
+  </div>
+  <div class="info" id="info"></div>
+
+  <div class="two">
+    <div><label for="buyer">Buyer name</label><input id="buyer" type="text" placeholder="optional" autocomplete="off"></div>
+    <div><label for="phone">Buyer phone</label><input id="phone" type="tel" placeholder="optional" autocomplete="off"></div>
+  </div>
+  <div class="two">
+    <div><label for="seller">Seller (you)</label><input id="seller" type="text" placeholder="your name" autocomplete="off"></div>
+    <div><label for="amt">Amount paid GH₵</label><input id="amt" type="number" inputmode="decimal" min="0" step="1" placeholder="0"></div>
+  </div>
+  <label>Paid by</label>
+  <div class="seg" id="pay">
+    <button type="button" data-pay="cash" class="on">Cash</button>
+    <button type="button" data-pay="momo">MoMo</button>
+  </div>
+  <button id="sellBtn" class="big">Mark as sold</button>
+  <div class="note">Hand over the ticket only after you have the money. A ticket only works at the gate after it is marked as sold here.</div>
+</section>
+
+<!-- ============ SALES ============ -->
+<section id="tab-sales" hidden>
+  <div class="box" id="byseller"></div>
+  <input id="search" type="search" placeholder="Search serial, buyer, seller, phone">
+  <div class="list" id="list"></div>
+</section>
+
+<!-- ============ SHARE ============ -->
+<section id="tab-share" hidden>
+  <div class="note">After selling, send your <b>sales code</b> to whoever runs the gate. They paste it into the scanner with <b>Load sales</b>. Send it again after every new sale.</div>
+  <div class="stack">
+    <button id="copyBtn">Copy sales code (for the gate)</button>
+    <button id="importBtn" class="ghost">Load sales code from another seller</button>
+    <button id="csvBtn" class="ghost">Download full sales list (CSV)</button>
+    <button id="eraseBtn" class="ghost" style="color:#ff7a7a">Erase everything on this phone</button>
+  </div>
+  <div class="note" id="builtNote"></div>
+</section>
+
+<script>/*__JSQR__*/</script>
+<script>/*__SHARED__*/</script>
+<script>
+const TICKETS = __TICKETS__;      // serial -> { h: proof of signature, t: S|D, p: price, s: sold when page was built }
+const EVENT_NAME = __EVENT__;
+const BUILT = __BUILT__;
+
+const $ = id => document.getElementById(id);
+$('evt').textContent = EVENT_NAME;
+$('builtNote').textContent = 'Ticket list built ' + BUILT + '. Sales are saved on this phone only, so use the same phone and browser each time.';
+
+/* ---------- saved state ---------- */
+let sales = storeApi.get('ruva_sell', {});   // serial -> { st, t, buyer, phone, seller, pay, amt }
+let warnedStorage = false;
+function persist() {
+  if (!storeApi.set('ruva_sell', sales) && !warnedStorage) {
+    warnedStorage = true;
+    UI.modal({ tone: 'warn', title: 'Cannot save on this phone', body: 'This browser is blocking storage (private mode?). Your sales will be lost if you close the page. Copy the sales code often.' });
+  }
+}
+const isSold = s => { const x = sales[s]; return x ? x.st === 1 : !!TICKETS[s].s; };
+const priceOf = s => TICKETS[s].p;
+const amountOf = s => { const x = sales[s]; return x && x.amt != null ? x.amt : priceOf(s); };
+const money = n => 'GH₵' + (Math.round(n * 100) / 100);
+
+let payMethod = 'cash', amtTouched = false;
+$('seller').value = storeApi.get('ruva_seller', '');
+
+/* ---------- tabs ---------- */
+$('tabs').addEventListener('click', e => {
+  const b = e.target.closest('button[data-tab]'); if (!b) return;
+  for (const x of $('tabs').children) x.classList.toggle('on', x === b);
+  for (const t of ['sell', 'sales', 'share']) $('tab-' + t).hidden = t !== b.dataset.tab;
+  if (b.dataset.tab === 'sales') renderSales();
+});
+
+/* ---------- numbers at the top ---------- */
+function refresh() {
+  let sold = 0, left = { S: 0, D: 0 }, soldMoney = 0;
+  for (const k in TICKETS) {
+    if (isSold(k)) { sold++; soldMoney += amountOf(k); } else left[TICKETS[k].t]++;
+  }
+  $('sSold').textContent = sold;
+  $('sMoney').textContent = Math.round(soldMoney * 100) / 100;
+  $('sLeft').textContent = left.S + left.D;
+  $('sLeftDetail').textContent = left.S + ' single · ' + left.D + ' double';
+}
+
+/* ---------- Sell tab ---------- */
+function showInfo() {
+  const s = normSerial($('serial').value), el = $('info');
+  if (!$('serial').value.trim()) { el.className = 'info'; el.textContent = ''; return; }
+  if (!s || !TICKETS[s]) { el.className = 'info bad'; el.textContent = 'No ticket with that serial'; return; }
+  const t = TICKETS[s];
+  if (isSold(s)) {
+    const r = sales[s] || {};
+    el.className = 'info warn';
+    el.textContent = s + ' · ' + typeName(t.t) + ' · already sold' + (r.buyer ? ' to ' + r.buyer : '');
+    return;
+  }
+  el.className = 'info ok';
+  el.textContent = s + ' · ' + typeName(t.t) + ' · ' + money(t.p) + ' · available';
+  if (!amtTouched) $('amt').value = t.p;
+}
+$('serial').addEventListener('input', showInfo);
+$('serial').addEventListener('blur', () => { const s = normSerial($('serial').value); if (s) { $('serial').value = s; showInfo(); } });
+$('amt').addEventListener('input', () => { amtTouched = true; });
+$('seller').addEventListener('change', () => storeApi.set('ruva_seller', $('seller').value.trim()));
+$('pay').addEventListener('click', e => {
+  const b = e.target.closest('button[data-pay]'); if (!b) return;
+  payMethod = b.dataset.pay;
+  for (const x of $('pay').children) x.classList.toggle('on', x === b);
+});
+
+function setSerial(s) {
+  $('serial').value = s; amtTouched = false; showInfo();
+  (s && !isSold(s) ? $('buyer') : $('serial')).focus();
+}
+
+async function scanTicket() {
+  const video = document.createElement('video');
+  video.setAttribute('playsinline', ''); video.muted = true;
+  let ctrl = null, closed = false, handled = false;
+  const m = UI.modal({
+    tone: 'info', icon: '▣', title: 'Scan the ticket',
+    body: 'Point the camera at the QR code on the ticket you are selling.',
+    node: video,
+    buttons: [{ label: 'Cancel', value: false, kind: 'ghost' }],
+    onClose: () => { closed = true; if (ctrl) ctrl.stop(); },
+  });
+  try {
+    ctrl = await QRCam.start(video, async text => {
+      if (handled) return;
+      const q = parseQR(text);
+      if (!q) return;                                        // not one of our tickets: keep looking
+      handled = true; m.close('scan');
+      const t = TICKETS[q.serial];
+      if (!t || sha256(q.serial + '|' + q.sig) !== t.h) {
+        await UI.modal({ tone: 'bad', icon: '✕', title: 'Fake or damaged ticket', body: 'This QR code is <b>not valid</b>. Do not sell this ticket.' });
+        return;
+      }
+      setSerial(q.serial);
+    });
+    if (closed) ctrl.stop();
+  } catch (e) {
+    m.close('error');
+    UI.modal(QRCam.errorPopup(e.code));
+  }
+}
+$('scanBtn').onclick = scanTicket;
+
+async function sell() {
+  const serial = normSerial($('serial').value);
+  const t = TICKETS[serial];
+  if (!serial || !t) {
+    UI.modal({ tone: 'warn', title: 'Which ticket?', body: 'Type the serial printed on the ticket, like <b>S-014</b> or <b>D-007</b>, or tap <b>Scan QR</b>.' });
+    return;
+  }
+  if (isSold(serial)) {
+    const r = sales[serial] || {};
+    UI.modal({ tone: 'warn', title: 'Already sold',
+      body: '<b>' + esc(serial) + '</b> was already marked as sold' + (r.buyer ? ' to <b>' + esc(r.buyer) + '</b>' : '') + (r.seller ? ' by ' + esc(r.seller) : '') + (r.t ? ' (' + esc(fmtMin(r.t)) + ')' : '') + '.<br>Do not give it to someone else.' });
+    return;
+  }
+  const seller = $('seller').value.trim();
+  if (!seller) { UI.modal({ tone: 'warn', title: 'Who is selling?', body: 'Type your name in the <b>Seller</b> box.' }); $('seller').focus(); return; }
+  const amtRaw = $('amt').value.trim(), amt = Number(amtRaw);
+  if (amtRaw === '' || !isFinite(amt) || amt < 0) { UI.modal({ tone: 'warn', title: 'How much was paid?', body: 'Type the amount paid in <b>Amount paid</b>.' }); $('amt').focus(); return; }
+  const buyer = $('buyer').value.trim(), phone = $('phone').value.trim();
+  const ok = await UI.confirm({
+    title: 'Sell this ticket?',
+    body: '<b>' + esc(serial) + '</b> · ' + typeName(t.t) + '<br><b>' + money(amt) + '</b> by ' + (payMethod === 'momo' ? 'MoMo' : 'cash') +
+          (amt !== t.p ? ' <span style="color:#f0b94a">(price is ' + money(t.p) + ')</span>' : '') +
+          '<br>Buyer: ' + esc(buyer || '-') + (phone ? ' · ' + esc(phone) : '') + '<br>Seller: ' + esc(seller),
+    yes: 'Yes, sold',
+  });
+  if (!ok) return;
+  sales[serial] = { st: 1, t: Sales.nowMin(), buyer, phone, seller, pay: payMethod, amt };
+  persist(); storeApi.set('ruva_seller', seller);
+  $('serial').value = ''; $('buyer').value = ''; $('phone').value = ''; $('amt').value = ''; amtTouched = false; showInfo();
+  refresh(); renderSales();
+  await UI.modal({ solid: true, tone: 'ok', icon: '✓', title: 'SOLD',
+    body: '<b>' + esc(serial) + '</b> · ' + typeName(t.t) + ' · ' + money(amt), autoClose: 1600, backdropClose: true,
+    buttons: [{ label: 'Next ticket', value: true }] });
+  $('serial').focus();
+}
+$('sellBtn').onclick = sell;
+
+/* ---------- Sales tab ---------- */
+function rows() {
+  return Object.keys(sales).filter(k => TICKETS[k]).map(k => Object.assign({ serial: k }, sales[k])).sort((a, b) => b.t - a.t);
+}
+function renderSales() {
+  const all = rows(), sold = all.filter(r => r.st === 1);
+  // totals per seller
+  const by = {};
+  for (const r of sold) {
+    const k = r.seller || (r.imp ? '(other phone)' : '(no name)');
+    const x = by[k] || (by[k] = { n: 0, tot: 0, cash: 0, momo: 0 });
+    const a = amountOf(r.serial);
+    x.n++; x.tot += a;
+    if (r.pay === 'cash') x.cash += a; else if (r.pay === 'momo') x.momo += a;
+  }
+  const names = Object.keys(by).sort();
+  $('byseller').innerHTML = names.length
+    ? '<table><tr><th>Seller</th><th class="n">Sold</th><th class="n">Cash</th><th class="n">MoMo</th><th class="n">Total</th></tr>' +
+      names.map(k => '<tr><td>' + esc(k) + '</td><td class="n">' + by[k].n + '</td><td class="n">' + by[k].cash + '</td><td class="n">' + by[k].momo + '</td><td class="n"><b>' + by[k].tot + '</b></td></tr>').join('') + '</table>'
+    : '<div class="empty" style="padding:6px">No sales yet</div>';
+  // list
+  const q = $('search').value.trim().toLowerCase();
+  const shown = all.filter(r => !q || [r.serial, r.buyer, r.seller, r.phone].join(' ').toLowerCase().includes(q));
+  $('list').innerHTML = shown.length ? shown.map(r => {
+    const t = TICKETS[r.serial];
+    const who = r.imp ? 'From another phone' : (esc(r.buyer || 'No name') + (r.phone ? ' · ' + esc(r.phone) : ''));
+    return '<div class="item' + (r.st === 1 ? '' : ' void') + '"><div class="s">' + esc(r.serial) + '<small>' + typeName(t.t) + '</small></div>' +
+      '<div class="m">' + who + '<small>' + esc(r.seller || '') + (r.seller ? ' · ' : '') + esc(fmtMin(r.t)) + (r.pay ? ' · ' + (r.pay === 'momo' ? 'MoMo' : 'cash') : '') + '</small></div>' +
+      '<div class="r">' + (r.st === 1 ? money(amountOf(r.serial)) + '<button class="ghost" data-void="' + esc(r.serial) + '">Cancel sale</button>' : '<small style="color:var(--mute)">Cancelled</small>') + '</div></div>';
+  }).join('') : '<div class="empty">' + (q ? 'Nothing matches your search' : 'Sold tickets will show here') + '</div>';
+}
+$('search').addEventListener('input', renderSales);
+$('list').addEventListener('click', async e => {
+  const b = e.target.closest('button[data-void]'); if (!b) return;
+  const serial = b.dataset.void, r = sales[serial];
+  const ok = await UI.confirm({
+    tone: 'bad', icon: '?', title: 'Cancel this sale?',
+    body: '<b>' + esc(serial) + '</b>' + (r.buyer ? ' sold to ' + esc(r.buyer) : '') + ' will be marked <b>not sold</b> and can be sold again.',
+    yes: 'Yes, cancel sale', danger: true,
+  });
+  if (!ok) return;
+  r.st = 0; r.t = Math.max(Sales.nowMin(), r.t + 1);
+  persist(); refresh(); renderSales();
+  UI.modal({ tone: 'ok', title: 'Sale cancelled', body: 'Send your sales code to the gate again so they know <b>' + esc(serial) + '</b> is no longer sold.' });
+});
+
+/* ---------- Share tab ---------- */
+$('copyBtn').onclick = async () => {
+  if (!Object.keys(sales).length) { UI.modal({ tone: 'info', title: 'Nothing to share yet', body: 'Mark at least one ticket as sold first.' }); return; }
+  const ok = await copyText(Sales.encode(sales), 'Send this to whoever runs the gate.');
+  if (ok) UI.modal({ tone: 'ok', title: 'Copied', body: 'Paste it into WhatsApp and send it to the gate. They use <b>Load sales</b> in the scanner.' });
+};
+$('importBtn').onclick = async () => {
+  const r = await UI.modal({
+    tone: 'info', icon: '⇩', title: 'Load sales code',
+    body: 'Paste a sales code from another seller to see their tickets as sold here too.',
+    input: { rows: 6, placeholder: 'RUVA1|S-001:1:...' },
+    buttons: [{ label: 'Cancel', value: false, kind: 'ghost' }, { label: 'Load', value: true }],
+  });
+  if (r.value !== true) return;
+  if (!r.text.trim()) { UI.modal({ tone: 'warn', title: 'Nothing pasted', body: 'Paste the sales code first.' }); return; }
+  const d = Sales.decode(r.text);
+  if (!d.ok) {
+    UI.modal({ tone: 'bad', title: d.why === 'damaged' ? 'Code is damaged' : 'Not a sales code',
+      body: d.why === 'damaged' ? 'Part of the text is missing or changed. Ask them to copy and send it again.' : 'That does not look like a sales code. It starts with <b>RUVA1|</b>.' });
+    return;
+  }
+  const m = Sales.merge(sales, d.recs, TICKETS);
+  persist(); refresh(); renderSales(); showInfo();
+  UI.modal({ tone: 'ok', title: 'Sales loaded', body: '<b>' + m.added + '</b> newly sold' + (m.voided ? ' · <b>' + m.voided + '</b> cancelled' : '') + '<br>' + m.same + ' already known' + (m.unknown ? '<br>' + m.unknown + ' not from this event (ignored)' : '') });
+};
+$('csvBtn').onclick = () => {
+  const all = rows().slice().sort((a, b) => a.t - b.t);
+  if (!all.length) { UI.modal({ tone: 'info', title: 'Nothing to download', body: 'No sales yet.' }); return; }
+  const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const out = [['serial', 'type', 'status', 'amount_ghs', 'paid_by', 'buyer', 'phone', 'seller', 'time'].join(',')];
+  for (const r of all) {
+    out.push([r.serial, typeName(TICKETS[r.serial].t), r.st === 1 ? 'sold' : 'cancelled', r.st === 1 ? amountOf(r.serial) : '', r.pay || '', q(r.buyer), q(r.phone), q(r.seller || (r.imp ? 'other phone' : '')), new Date(r.t * 60000).toISOString()].join(','));
+  }
+  downloadText('ruva_sales.csv', '﻿' + out.join('\n'), 'text/csv');
+};
+$('eraseBtn').onclick = async () => {
+  const r = await UI.modal({
+    tone: 'bad', title: 'Erase all sales?',
+    body: 'This deletes every sale recorded on this phone. Download the CSV first. Type <b>ERASE</b> to confirm.',
+    input: { placeholder: 'ERASE', upper: true },
+    buttons: [{ label: 'Cancel', value: false, kind: 'ghost' }, { label: 'Erase', value: true, kind: 'danger' }],
+  });
+  if (r.value !== true) return;
+  if (r.text.trim().toUpperCase() !== 'ERASE') { UI.modal({ tone: 'warn', title: 'Not erased', body: 'You need to type <b>ERASE</b> exactly.' }); return; }
+  sales = {}; persist(); refresh(); renderSales(); showInfo();
+  UI.modal({ tone: 'ok', title: 'Sales erased' });
+};
+
+refresh(); renderSales();
+</script>
+</body>
+</html>

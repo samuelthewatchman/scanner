@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RUVA Gate</title>
+<style>
+  :root { --bg:#0b0b0b; --card:#161616; --line:#2a2a2a; --text:#f2f2f2; --mute:#8d8d8d; --gold:#c8a04a;
+          --ok:#1fa75a; --bad:#d23b3b; --warn:#d99a1d; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { padding: 12px 14px calc(24px + env(safe-area-inset-bottom)); max-width: 520px; margin: 0 auto; }
+  header { display:flex; align-items:baseline; justify-content:space-between; padding: 6px 2px 12px; }
+  header h1 { margin:0; font-size:20px; letter-spacing:.12em; }
+  header h1 span { color:var(--gold); }
+  header small { color:var(--mute); font-size:11px; text-align:right; }
+  .stats { display:grid; grid-template-columns: repeat(3,1fr); gap:8px; margin-bottom:12px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px; text-align:center; }
+  .stat b { display:block; font-size:24px; }
+  .stat span { font-size:11px; color:var(--mute); letter-spacing:.06em; text-transform:uppercase; }
+  .cam { position:relative; background:#000; border:1px solid var(--line); border-radius:16px; overflow:hidden; aspect-ratio: 1/1; }
+  video { width:100%; height:100%; object-fit:cover; display:block; }
+  .frame { position:absolute; inset:18%; border:2px solid var(--gold); border-radius:14px; pointer-events:none; opacity:.8; }
+  .camoff { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; text-align:center; padding:20px; color:var(--mute); background:#000; }
+  button { font:inherit; border:0; border-radius:12px; padding:12px 16px; background:var(--gold); color:#111; font-weight:700; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--text); border:1px solid var(--line); font-weight:600; }
+  .last { margin-top:12px; border-radius:12px; padding:12px 14px; text-align:center; background:var(--card); border:1px solid var(--line); font-size:14px; color:var(--mute); }
+  .last.ok { color:#fff; background:var(--ok); border-color:var(--ok); }
+  .last.bad { color:#fff; background:var(--bad); border-color:var(--bad); }
+  .last.warn { color:#1a1200; background:var(--warn); border-color:var(--warn); }
+  .manual { margin-top:14px; display:grid; grid-template-columns: 1fr 1fr auto; gap:8px; }
+  input { font:inherit; padding:12px; border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--text); width:100%; text-transform:uppercase; }
+  h2 { font-size:12px; letter-spacing:.1em; color:var(--mute); text-transform:uppercase; margin:20px 2px 8px; }
+  .log { background:var(--card); border:1px solid var(--line); border-radius:12px; max-height:220px; overflow:auto; }
+  .log div { display:flex; justify-content:space-between; padding:8px 12px; border-bottom:1px solid var(--line); font-size:13px; }
+  .log div:last-child { border-bottom:0; }
+  .row { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .row button { flex:1; min-width:120px; padding:11px 10px; font-size:14px; }
+  .note { color:var(--mute); font-size:12px; line-height:1.5; margin-top:10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>R<span>Ü</span>VA · GATE</h1>
+  <small id="evt"></small>
+</header>
+
+<div class="stats">
+  <div class="stat"><b id="sIn">0</b><span>Entered</span></div>
+  <div class="stat"><b id="sSold">0</b><span>Admits sold</span></div>
+  <div class="stat"><b id="sLeft">0</b><span>Still to come</span></div>
+</div>
+
+<div class="cam">
+  <video id="video" playsinline muted></video>
+  <div class="frame"></div>
+  <div class="camoff" id="camoff">
+    <div>Point the camera at the QR code on the ticket.</div>
+    <button id="startBtn">Start camera</button>
+  </div>
+</div>
+
+<div class="last" id="last">Ready. Scan a ticket.</div>
+
+<div class="manual">
+  <input id="mSerial" placeholder="Serial e.g. S-014" autocapitalize="characters" autocomplete="off">
+  <input id="mCode" placeholder="Code e.g. 7F3K" autocapitalize="characters" autocomplete="off" maxlength="4">
+  <button id="mGo">Check</button>
+</div>
+<div class="note">No camera or a damaged QR? Type the serial and the 4-letter code printed under the QR.</div>
+
+<h2>Recent scans</h2>
+<div class="log" id="log"></div>
+<div class="row">
+  <button id="loadBtn">Load sales</button>
+  <button class="ghost" id="exportBtn">Download scan log</button>
+  <button class="ghost" id="resetBtn">Reset scans</button>
+</div>
+<div class="note" id="salesNote"></div>
+<div class="note">
+  Entry counts are saved on <b>this phone only</b>. Use one phone per gate and do not clear the browser data during the event.
+  <span style="display:block;margin-top:6px"><a href="#" id="clearSales" style="color:var(--mute)">Clear loaded sales</a></span>
+</div>
+
+<script>/*__JSQR__*/</script>
+<script>/*__SHARED__*/</script>
+<script>
+const TICKETS = __TICKETS__;      // serial -> { h: proof of signature, c: proof of 4-letter code, t: S|D, a: admits, s: sold when page was built }
+const EVENT_NAME = __EVENT__;
+const BUILT = __BUILT__;
+
+const $ = id => document.getElementById(id);
+$('evt').textContent = EVENT_NAME;
+
+/* ---------- saved state (this phone only) ---------- */
+let scans = storeApi.get('ruva_scans', {});   // serial -> { n: entries used, last: iso time }
+let log = storeApi.get('ruva_log', []);
+let sales = storeApi.get('ruva_sales', {});   // loaded from sellers: serial -> { st, t }
+let salesAt = storeApi.get('ruva_sales_at', '');
+
+const isSold = serial => { const x = sales[serial]; return x ? x.st === 1 : !!TICKETS[serial].s; };
+
+/* ---------- ticket checking ---------- */
+function checkTicket(serial, kind, proof) {
+  const t = TICKETS[serial];
+  if (!t) return { status: 'INVALID', serial };
+  const given = kind === 'qr' ? sha256(serial + '|' + proof) : sha256(serial + '|' + String(proof).toUpperCase());
+  if (given !== (kind === 'qr' ? t.h : t.c)) return { status: 'INVALID', serial };
+  if (!isSold(serial)) return { status: 'NOT_SOLD', serial, type: t.t };
+  const used = (scans[serial] && scans[serial].n) || 0;
+  if (used >= t.a) return { status: 'USED', serial, type: t.t, admits: t.a, used, last: scans[serial].last };
+  return { status: 'VALID', serial, type: t.t, admits: t.a, entry: used + 1 };
+}
+
+/* ---------- screen ---------- */
+function refreshStats() {
+  let sold = 0;
+  for (const k in TICKETS) if (isSold(k)) sold += TICKETS[k].a;
+  const inn = Object.values(scans).reduce((n, s) => n + s.n, 0);
+  $('sIn').textContent = inn; $('sSold').textContent = sold; $('sLeft').textContent = Math.max(0, sold - inn);
+  const loaded = Object.keys(sales).length;
+  $('salesNote').innerHTML = 'Ticket list built ' + esc(BUILT) + '. ' +
+    (loaded ? 'Sales loaded for <b>' + loaded + '</b> tickets' + (salesAt ? ' (last ' + esc(fmtTime(salesAt)) + ')' : '') + '.' : 'No sales loaded yet.') +
+    ' Tickets sold after that need a new <b>Load sales</b>.';
+}
+function renderLog() {
+  const rows = log.slice(-30).reverse();
+  $('log').innerHTML = rows.length ? rows.map(e => {
+    const col = e.status === 'VALID' ? 'var(--ok)' : e.status === 'NOT_SOLD' ? 'var(--warn)' : 'var(--bad)';
+    return '<div><span>' + esc(fmtTime(e.t)) + ' · ' + esc(e.serial === '?' ? 'unknown ticket' : e.serial) + '</span><b style="color:' + col + '">' + esc(e.status.replace('_', ' ')) + '</b></div>';
+  }).join('') : '<div><span style="color:var(--mute)">Nothing scanned yet</span></div>';
+}
+function setLast(res) {
+  const el = $('last');
+  const cls = res.status === 'VALID' ? 'ok' : res.status === 'NOT_SOLD' ? 'warn' : 'bad';
+  const txt = { VALID: 'Valid', USED: 'Already used', NOT_SOLD: 'Not activated', INVALID: 'Invalid / fake' }[res.status];
+  el.className = 'last ' + cls;
+  el.textContent = 'Last: ' + (res.serial && res.serial !== '?' ? res.serial : 'unknown ticket') + ' · ' + txt;
+}
+
+function beep(ok) {
+  try {
+    const ctx = beep.ctx || (beep.ctx = new (window.AudioContext || window.webkitAudioContext)());
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.value = ok ? 880 : 220; o.type = 'square'; g.gain.value = 0.06;
+    o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime + (ok ? 0.12 : 0.35));
+  } catch (e) {}
+  try { navigator.vibrate && navigator.vibrate(ok ? 60 : [120, 60, 120]); } catch (e) {}
+}
+
+/* ---------- scan result popup ---------- */
+let lastText = '', lastAt = 0;
+function resultPopup(res) {
+  let o;
+  if (res.status === 'VALID') {
+    o = { tone: 'ok', icon: '✓', title: 'VALID',
+          body: '<b>' + esc(res.serial) + '</b> · ' + typeName(res.type) + '<br>' + (res.admits > 1 ? 'Entry ' + res.entry + ' of ' + res.admits : 'Let them in'),
+          autoClose: 1800 };
+  } else if (res.status === 'USED') {
+    o = { tone: 'bad', icon: '✕', title: 'ALREADY USED',
+          body: '<b>' + esc(res.serial) + '</b> · all ' + res.admits + (res.admits > 1 ? ' entries' : ' entry') + ' used<br>Last scan ' + esc(fmtTime(res.last)) + '<br><b>Do NOT admit</b>' };
+  } else if (res.status === 'NOT_SOLD') {
+    o = { tone: 'warn', icon: '!', title: 'NOT ACTIVATED',
+          body: '<b>' + esc(res.serial) + '</b> was never marked as sold.<br>Send the person to the team lead, or tap <b>Load sales</b> if sales were missed.' };
+  } else {
+    o = { tone: 'bad', icon: '✕', title: 'INVALID / FAKE', body: 'This ticket is not recognised.<br><b>Do NOT admit</b>' };
+  }
+  return UI.modal(Object.assign({ solid: true, backdropClose: true, buttons: [{ label: 'OK', value: true }] }, o))
+    .then(() => { lastAt = Date.now(); });
+}
+
+function handle(serial, kind, proof) {
+  const res = checkTicket(serial, kind, proof);
+  if (res.status === 'VALID') {
+    scans[serial] = { n: res.entry, last: new Date().toISOString() };
+    storeApi.set('ruva_scans', scans);
+  }
+  log.push({ t: new Date().toISOString(), serial: res.serial || '?', status: res.status });
+  log = log.slice(-2000); storeApi.set('ruva_log', log);
+  beep(res.status === 'VALID');
+  setLast(res); renderLog(); refreshStats();
+  resultPopup(res);
+  return res;
+}
+
+function onCode(text) {
+  if (!text) return;                                         // blank read: nothing to check
+  if (UI.isOpen()) return;                                   // a popup is showing: ignore the camera until it closes
+  const now = Date.now();
+  if (text === lastText && now - lastAt < 3500) return;     // same code still in front of the camera
+  lastText = text; lastAt = now;
+  const q = parseQR(text);
+  if (!q) { handle('?', 'qr', ''); return; }
+  handle(q.serial, 'qr', q.sig);
+}
+
+/* ---------- camera ---------- */
+let cam = null;
+$('startBtn').onclick = async () => {
+  if (cam) return;
+  try {
+    cam = await QRCam.start($('video'), onCode);
+    $('camoff').style.display = 'none';
+  } catch (e) {
+    UI.modal(QRCam.errorPopup(e.code));
+  }
+};
+
+/* ---------- manual check ---------- */
+$('mGo').onclick = () => {
+  const s = normSerial($('mSerial').value), c = $('mCode').value.trim().toUpperCase();
+  if (!s || c.length !== 4) {
+    UI.modal({ tone: 'warn', title: 'Check the details', body: 'Type the serial (like <b>S-014</b>) and the <b>4-character code</b> printed under the QR.' });
+    return;
+  }
+  handle(s, 'code', c);
+  $('mSerial').value = ''; $('mCode').value = '';
+};
+
+/* ---------- load sales from sellers ---------- */
+async function loadSales() {
+  const r = await UI.modal({
+    tone: 'info', icon: '⇩', title: 'Load sales',
+    body: 'Paste the <b>sales code</b> your seller copied from their Sell page. You can load several, they add together.',
+    input: { rows: 6, placeholder: 'RUVA1|S-001:1:...' },
+    buttons: [{ label: 'Cancel', value: false, kind: 'ghost' }, { label: 'Load', value: true }],
+  });
+  if (r.value !== true) return;
+  if (!r.text.trim()) { UI.modal({ tone: 'warn', title: 'Nothing pasted', body: 'Paste the sales code first.' }); return; }
+  const d = Sales.decode(r.text);
+  if (!d.ok) {
+    UI.modal({ tone: 'bad', title: d.why === 'damaged' ? 'Code is damaged' : 'Not a sales code',
+      body: d.why === 'damaged' ? 'Part of the text is missing or changed. Ask the seller to copy and send it again.' : 'That does not look like a sales code. It starts with <b>RUVA1|</b>.' });
+    return;
+  }
+  const m = Sales.merge(sales, d.recs, TICKETS);
+  storeApi.set('ruva_sales', sales);
+  salesAt = new Date().toISOString(); storeApi.set('ruva_sales_at', salesAt);
+  refreshStats();
+  let body = '<b>' + m.added + '</b> newly sold' + (m.voided ? ' · <b>' + m.voided + '</b> cancelled' : '') + '<br>' + m.same + ' already known';
+  if (m.unknown) body += '<br>' + m.unknown + ' not from this event (ignored)';
+  if (d.bad) body += '<br>' + d.bad + ' unreadable entries skipped';
+  UI.modal({ tone: 'ok', title: 'Sales loaded', body });
+}
+$('loadBtn').onclick = loadSales;
+
+$('clearSales').onclick = async e => {
+  e.preventDefault();
+  if (!Object.keys(sales).length) { UI.modal({ tone: 'info', title: 'Nothing to clear', body: 'No sales have been loaded on this phone.' }); return; }
+  const ok = await UI.confirm({ tone: 'warn', title: 'Clear loaded sales?', body: 'Tickets will show <b>NOT ACTIVATED</b> until you load the sales again. Entry counts stay.', yes: 'Clear', danger: true });
+  if (!ok) return;
+  sales = {}; storeApi.set('ruva_sales', sales); storeApi.set('ruva_sales_at', ''); salesAt = '';
+  refreshStats();
+};
+
+/* ---------- log + reset ---------- */
+$('exportBtn').onclick = () => {
+  if (!log.length) { UI.modal({ tone: 'info', title: 'Nothing to download', body: 'No tickets have been scanned yet.' }); return; }
+  downloadText('ruva_gate_log.csv', ['time,serial,result', ...log.map(e => e.t + ',' + e.serial + ',' + e.status)].join('\n'), 'text/csv');
+};
+$('resetBtn').onclick = async () => {
+  const r = await UI.modal({
+    tone: 'bad', title: 'Erase all scans?',
+    body: 'This forgets who has already entered on this phone. Type <b>RESET</b> to confirm.',
+    input: { placeholder: 'RESET', upper: true },
+    buttons: [{ label: 'Cancel', value: false, kind: 'ghost' }, { label: 'Erase', value: true, kind: 'danger' }],
+  });
+  if (r.value !== true) return;
+  if (r.text.trim().toUpperCase() !== 'RESET') { UI.modal({ tone: 'warn', title: 'Not erased', body: 'You need to type <b>RESET</b> exactly.' }); return; }
+  scans = {}; log = []; storeApi.set('ruva_scans', scans); storeApi.set('ruva_log', log);
+  $('last').className = 'last'; $('last').textContent = 'Ready. Scan a ticket.';
+  refreshStats(); renderLog();
+  UI.modal({ tone: 'ok', title: 'Scans cleared' });
+};
+
+/* ---------- start ---------- */
+refreshStats(); renderLog();
+if (!Object.keys(sales).length && !Object.values(TICKETS).some(t => t.s)) {
+  UI.modal({
+    tone: 'warn', title: 'No sales loaded',
+    body: 'Until you load the sales, every ticket will show <b>NOT ACTIVATED</b>.',
+    buttons: [{ label: 'Later', value: false, kind: 'ghost' }, { label: 'Load sales', value: true }],
+  }).then(r => { if (r.value === true) loadSales(); });
+}
+</script>
+</body>
+</html>

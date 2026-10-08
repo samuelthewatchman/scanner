@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RUVA Gate</title>
+<style>
+  :root { --bg:#0b0b0b; --card:#161616; --line:#2a2a2a; --text:#f2f2f2; --mute:#8d8d8d; --gold:#c8a04a;
+          --ok:#1fa75a; --bad:#d23b3b; --warn:#d99a1d; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { padding: 12px 14px calc(24px + env(safe-area-inset-bottom)); max-width: 520px; margin: 0 auto; }
+  header { display:flex; align-items:baseline; justify-content:space-between; padding: 6px 2px 12px; }
+  header h1 { margin:0; font-size:20px; letter-spacing:.12em; }
+  header h1 span { color:var(--gold); }
+  header small { color:var(--mute); font-size:11px; text-align:right; }
+  .stats { display:grid; grid-template-columns: repeat(3,1fr); gap:8px; margin-bottom:12px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px; text-align:center; }
+  .stat b { display:block; font-size:24px; }
+  .stat span { font-size:11px; color:var(--mute); letter-spacing:.06em; text-transform:uppercase; }
+  .cam { position:relative; background:#000; border:1px solid var(--line); border-radius:16px; overflow:hidden; aspect-ratio: 1/1; }
+  video { width:100%; height:100%; object-fit:cover; display:block; }
+  .frame { position:absolute; inset:18%; border:2px solid var(--gold); border-radius:14px; pointer-events:none; opacity:.8; }
+  .camoff { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; text-align:center; padding:20px; color:var(--mute); background:#000; }
+  button { font:inherit; border:0; border-radius:12px; padding:12px 16px; background:var(--gold); color:#111; font-weight:700; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--text); border:1px solid var(--line); font-weight:600; }
+  .last { margin-top:12px; border-radius:12px; padding:12px 14px; text-align:center; background:var(--card); border:1px solid var(--line); font-size:14px; color:var(--mute); }
+  .last.ok { color:#fff; background:var(--ok); border-color:var(--ok); }
+  .last.bad { color:#fff; background:var(--bad); border-color:var(--bad); }
+  .last.warn { color:#1a1200; background:var(--warn); border-color:var(--warn); }
+  .manual { margin-top:14px; display:grid; grid-template-columns: 1fr 1fr auto; gap:8px; }
+  input { font:inherit; padding:12px; border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--text); width:100%; text-transform:uppercase; }
+  h2 { font-size:12px; letter-spacing:.1em; color:var(--mute); text-transform:uppercase; margin:20px 2px 8px; }
+  .log { background:var(--card); border:1px solid var(--line); border-radius:12px; max-height:220px; overflow:auto; }
+  .log div { display:flex; justify-content:space-between; padding:8px 12px; border-bottom:1px solid var(--line); font-size:13px; }
+  .log div:last-child { border-bottom:0; }
+  .row { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .row button { flex:1; min-width:120px; padding:11px 10px; font-size:14px; }
+  .note { color:var(--mute); font-size:12px; line-height:1.5; margin-top:10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>R<span>Ü</span>VA · GATE</h1>
+  <small id="evt"></small>
+</header>
+
+<div class="stats">
+  <div class="stat"><b id="sIn">0</b><span>Entered</span></div>
+  <div class="stat"><b id="sSold">0</b><span>Admits sold</span></div>
+  <div class="stat"><b id="sLeft">0</b><span>Still to come</span></div>
+</div>
+
+<div class="cam">
+  <video id="video" playsinline muted></video>
+  <div class="frame"></div>
+  <div class="camoff" id="camoff">
+    <div>Point the camera at the QR code on the ticket.</div>
+    <button id="startBtn">Start camera</button>
+  </div>
+</div>
+
+<div class="last" id="last">Ready. Scan a ticket.</div>
+
+<div class="manual">
+  <input id="mSerial" placeholder="Serial e.g. S-014" autocapitalize="characters" autocomplete="off">
+  <input id="mCode" placeholder="Code e.g. 7F3K" autocapitalize="characters" autocomplete="off" maxlength="4">
+  <button id="mGo">Check</button>
+</div>
+<div class="note">No camera or a damaged QR? Type the serial and the 4-letter code printed under the QR.</div>
+
+<h2>Recent scans</h2>
+<div class="log" id="log"></div>
+<div class="row">
+  <button id="loadBtn">Load sales</button>
+  <button class="ghost" id="exportBtn">Download scan log</button>
+  <button class="ghost" id="resetBtn">Reset scans</button>
+</div>
+<div class="note" id="salesNote"></div>
+<div class="note">
+  Entry counts are saved on <b>this phone only</b>. Use one phone per gate and do not clear the browser data during the event.
+  <span style="display:block;margin-top:6px"><a href="#" id="clearSales" style="color:var(--mute)">Clear loaded sales</a></span>
+</div>
+
+<script></script>
+<script>/* RÜVA shared helpers, inlined into scanner.html and sell.html by ruva_tickets.py
+   - UI      : popups (modals) instead of browser alerts
+   - QRCam   : camera QR reader
+   - Sales   : "sales code" encode / decode / merge (how sold tickets travel to the gate)
+   - sha256, parseQR, normSerial, copyText, downloadText, fmtMin                                  */
+
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* ---------- SHA-256 (works on plain http / file:// too) ---------- */
+function sha256(str) {
+  const K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  const bytes = Array.from(new TextEncoder().encode(str));
+  const l = bytes.length * 8;
+  bytes.push(0x80);
+  while (bytes.length % 64 !== 56) bytes.push(0);
+  const hi = Math.floor(l / 4294967296), lo = l >>> 0;
+  for (const v of [hi, lo]) bytes.push((v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255);
+  let h = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  const rotr = (x, n) => (x >>> n) | (x << (32 - n));
+  for (let i = 0; i < bytes.length; i += 64) {
+    const w = new Array(64);
+    for (let t = 0; t < 16; t++) w[t] = (bytes[i+4*t] << 24) | (bytes[i+4*t+1] << 16) | (bytes[i+4*t+2] << 8) | bytes[i+4*t+3];
+    for (let t = 16; t < 64; t++) {
+      const s0 = rotr(w[t-15],7) ^ rotr(w[t-15],18) ^ (w[t-15] >>> 3);
+      const s1 = rotr(w[t-2],17) ^ rotr(w[t-2],19) ^ (w[t-2] >>> 10);
+      w[t] = (w[t-16] + s0 + w[t-7] + s1) | 0;
+    }
+    let [a,b,c,d,e,f,g,hh] = h;
+    for (let t = 0; t < 64; t++) {
+      const S1 = rotr(e,6) ^ rotr(e,11) ^ rotr(e,25);
+      const ch = (e & f) ^ (~e & g);
+      const t1 = (hh + S1 + ch + K[t] + w[t]) | 0;
+      const S0 = rotr(a,2) ^ rotr(a,13) ^ rotr(a,22);
+      const maj = (a & b) ^ (a & c) ^ (b & c);
+      const t2 = (S0 + maj) | 0;
+      hh = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+    }
+    h = [(h[0]+a)|0,(h[1]+b)|0,(h[2]+c)|0,(h[3]+d)|0,(h[4]+e)|0,(h[5]+f)|0,(h[6]+g)|0,(h[7]+hh)|0];
+  }
+  return h.map(x => (x >>> 0).toString(16).padStart(8, '0')).join('');
+}
+
+/* ---------- ticket text helpers ---------- */
+// ticket QR looks like  S-001.BB891F01B2207BCD  (serial, dot, 16-character signature)
+function parseQR(text) {
+  const m = String(text).trim().toUpperCase().match(/^([SD]-\d{3,5})\.([0-9A-F]{16})$/);
+  return m ? { serial: m[1], sig: m[2].toLowerCase() } : null;
+}
+// "s14", "S-14", "d 7" -> "S-014", "D-007"; anything else -> ""
+function normSerial(s) {
+  const m = String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').match(/^([SD])(\d{1,5})$/);
+  return m ? m[1] + '-' + m[2].padStart(3, '0') : '';
+}
+const typeName = t => (t === 'S' ? 'Single' : 'Double');
+const fmtMin = m => new Date(m * 60000).toLocaleString([], { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+const fmtTime = iso => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+/* ---------- popups (modals) ---------- */
+const UI = (() => {
+  const CSS = `
+  .mdl-ov{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.74);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);opacity:0;transition:opacity .15s}
+  .mdl-ov.show{opacity:1}
+  .mdl-card{width:100%;max-width:400px;max-height:92vh;overflow:auto;background:#161616;border:1px solid #2a2a2a;border-radius:20px;padding:22px 20px 18px;text-align:center;color:#f2f2f2;transform:translateY(10px) scale(.97);transition:transform .15s;box-shadow:0 20px 60px rgba(0,0,0,.6);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .mdl-ov.show .mdl-card{transform:none}
+  .mdl-icon{width:54px;height:54px;border-radius:50%;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:800;background:#2a2a2a}
+  .tone-ok .mdl-icon{background:#1fa75a;color:#fff}.tone-bad .mdl-icon{background:#d23b3b;color:#fff}
+  .tone-warn .mdl-icon{background:#d99a1d;color:#1a1200}.tone-info .mdl-icon{background:#c8a04a;color:#111}
+  .mdl-title{font-size:21px;font-weight:800;letter-spacing:.02em;margin-bottom:6px}
+  .mdl-body{font-size:15px;line-height:1.55;color:#d6d6d6;word-break:break-word}
+  .mdl-body b{color:#fff}
+  .mdl-extra{margin-top:12px}
+  .mdl-extra video{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:14px;background:#000;display:block}
+  .mdl-in{width:100%;margin-top:14px;padding:12px;border-radius:12px;border:1px solid #333;background:#0f0f0f;color:#fff;font:inherit;font-size:16px}
+  textarea.mdl-in{min-height:110px;resize:vertical;font-family:ui-monospace,Menlo,monospace;font-size:13px;text-align:left}
+  .mdl-btns{display:flex;gap:10px;margin-top:18px}
+  .mdl-btns button{flex:1;font:inherit;font-weight:700;font-size:15px;border:0;border-radius:12px;padding:13px 10px;cursor:pointer;background:#c8a04a;color:#111}
+  .mdl-btns button.ghost{background:transparent;color:#f2f2f2;border:1px solid #3a3a3a}
+  .mdl-btns button.danger{background:#d23b3b;color:#fff}
+  .mdl-card.solid{border:0;padding:30px 20px 22px}
+  .mdl-card.solid.tone-ok{background:#1fa75a;color:#fff}.mdl-card.solid.tone-bad{background:#d23b3b;color:#fff}
+  .mdl-card.solid.tone-warn{background:#d99a1d;color:#1a1200}.mdl-card.solid.tone-info{background:#c8a04a;color:#111}
+  .solid .mdl-icon{background:rgba(255,255,255,.24);color:inherit;width:68px;height:68px;font-size:38px}
+  .solid .mdl-title{font-size:32px}
+  .solid .mdl-body{color:inherit;font-size:17px}.solid .mdl-body b{color:inherit}
+  .solid .mdl-btns button{background:rgba(0,0,0,.28);color:inherit}
+  .mdl-bar{height:4px;background:rgba(255,255,255,.3);border-radius:2px;margin-top:16px;overflow:hidden}
+  .mdl-bar i{display:block;height:100%;background:rgba(255,255,255,.95);transform-origin:left;transform:scaleX(1)}
+  @media (prefers-reduced-motion:reduce){.mdl-ov,.mdl-card{transition:none}}`;
+  const st = document.createElement('style');
+  st.textContent = CSS;
+  document.head.appendChild(st);
+
+  const DEFAULT_ICON = { ok: '✓', bad: '✕', warn: '!', info: 'i' };
+  const stack = [];
+  let z = 1000;
+
+  /* modal({tone, solid, icon, title, body, node, input, buttons, autoClose, backdropClose, onOpen, onClose})
+     -> Promise<{value, text}>  (value = clicked button's value, null if dismissed). The promise has .close(value). */
+  function modal(o) {
+    o = o || {};
+    let closeFn = () => {};
+    const p = new Promise(resolve => {
+      const ov = document.createElement('div');
+      ov.className = 'mdl-ov';
+      ov.style.zIndex = ++z;
+      const tone = o.tone || 'info';
+      const card = document.createElement('div');
+      card.className = 'mdl-card tone-' + tone + (o.solid ? ' solid' : '');
+      card.setAttribute('role', 'dialog');
+      card.setAttribute('aria-modal', 'true');
+      const icon = o.icon === undefined ? DEFAULT_ICON[tone] : o.icon;
+      let h = '';
+      if (icon) h += '<div class="mdl-icon">' + icon + '</div>';
+      if (o.title) h += '<div class="mdl-title">' + o.title + '</div>';
+      if (o.body) h += '<div class="mdl-body">' + o.body + '</div>';
+      card.innerHTML = h;
+      if (o.node) {
+        const w = document.createElement('div');
+        w.className = 'mdl-extra';
+        w.appendChild(o.node);
+        card.appendChild(w);
+      }
+      let inp = null;
+      if (o.input) {
+        inp = document.createElement(o.input.rows ? 'textarea' : 'input');
+        inp.className = 'mdl-in';
+        if (o.input.rows) inp.rows = o.input.rows; else inp.type = o.input.type || 'text';
+        if (o.input.placeholder) inp.placeholder = o.input.placeholder;
+        if (o.input.value) inp.value = o.input.value;
+        if (o.input.readonly) inp.readOnly = true;
+        if (o.input.upper) inp.style.textTransform = 'uppercase';
+        inp.setAttribute('autocomplete', 'off');
+        inp.setAttribute('autocapitalize', o.input.upper ? 'characters' : 'off');
+        inp.setAttribute('spellcheck', 'false');
+        card.appendChild(inp);
+      }
+      const buttons = o.buttons || [{ label: 'OK', value: true }];
+      let primary = null;
+      if (buttons.length) {
+        const row = document.createElement('div');
+        row.className = 'mdl-btns';
+        buttons.forEach(b => {
+          const el = document.createElement('button');
+          el.type = 'button';
+          el.className = b.kind || '';
+          el.textContent = b.label;
+          el.addEventListener('click', () => closeFn(b.value));
+          if (!primary && b.kind !== 'ghost') primary = { el, value: b.value };
+          row.appendChild(el);
+        });
+        card.appendChild(row);
+      }
+      let timer = null, done = false;
+      const bar = o.autoClose ? document.createElement('div') : null;
+      if (bar) { bar.className = 'mdl-bar'; bar.innerHTML = '<i></i>'; card.appendChild(bar); }
+      const prevFocus = document.activeElement;
+      const onKey = e => {
+        if (stack[stack.length - 1] !== ov) return;
+        if (e.key === 'Escape' && o.cancelable !== false) { e.stopPropagation(); closeFn(null); }
+        else if (e.key === 'Enter' && inp && inp.tagName === 'INPUT' && primary) { e.preventDefault(); primary.el.click(); }
+      };
+      closeFn = value => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        document.removeEventListener('keydown', onKey, true);
+        const i = stack.indexOf(ov); if (i >= 0) stack.splice(i, 1);
+        ov.classList.remove('show');
+        setTimeout(() => ov.remove(), 170);
+        try { if (prevFocus && prevFocus.focus && document.contains(prevFocus)) prevFocus.focus(); } catch (e) {}
+        if (o.onClose) { try { o.onClose(); } catch (e) {} }
+        resolve({ value: value === undefined ? null : value, text: inp ? inp.value : '' });
+      };
+      ov.addEventListener('click', e => {
+        if (o.backdropClose && (e.target === ov || o.solid)) closeFn(o.solid ? 'tap' : null);
+      });
+      ov.appendChild(card);
+      document.body.appendChild(ov);
+      stack.push(ov);
+      document.addEventListener('keydown', onKey, true);
+      requestAnimationFrame(() => ov.classList.add('show'));
+      if (o.autoClose) {
+        timer = setTimeout(() => closeFn('auto'), o.autoClose);
+        const i = bar.firstChild;
+        i.style.transition = 'transform ' + o.autoClose + 'ms linear';
+        requestAnimationFrame(() => requestAnimationFrame(() => { i.style.transform = 'scaleX(0)'; }));
+      }
+      setTimeout(() => {
+        try { (inp || (primary && primary.el) || card).focus({ preventScroll: true }); } catch (e) {}
+        if (o.onOpen) { try { o.onOpen({ card, input: inp, close: closeFn }); } catch (e) {} }
+      }, 30);
+    });
+    p.close = v => closeFn(v);
+    return p;
+  }
+
+  async function confirm(o) {
+    const r = await modal(Object.assign({
+      icon: '?',
+      buttons: [{ label: o.no || 'Cancel', value: false, kind: 'ghost' }, { label: o.yes || 'Yes', value: true, kind: o.danger ? 'danger' : '' }],
+    }, o));
+    return r.value === true;
+  }
+  return { modal, confirm, isOpen: () => stack.length > 0 };
+})();
+
+/* ---------- camera QR reader ---------- */
+const QRCam = {
+  // Resolves to {stop()}. Rejects with an Error whose .code is nohttps | nosupport | denied | other
+  async start(video, onText) {
+    const fail = code => Object.assign(new Error(code), { code });
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw fail('nohttps');
+    const hasNative = 'BarcodeDetector' in window;
+    const hasJs = typeof jsQR === 'function';
+    if (!hasNative && !hasJs) throw fail('nosupport');
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false });
+    } catch (e) {
+      throw fail(e && (e.name === 'NotAllowedError' || e.name === 'SecurityError') ? 'denied' : 'other');
+    }
+    video.srcObject = stream;
+    video.setAttribute('playsinline', '');
+    video.muted = true;
+    try { await video.play(); } catch (e) {}
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const det = hasNative ? new BarcodeDetector({ formats: ['qr_code'] }) : null;
+    let busy = false;
+    const id = setInterval(async () => {
+      if (busy || video.readyState < 2) return;
+      busy = true;
+      try {
+        if (det) {
+          const codes = await det.detect(video);
+          if (codes.length) onText(codes[0].rawValue);
+        } else {
+          canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+          ctx.drawImage(video, 0, 0);
+          const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const r = jsQR(img.data, img.width, img.height);
+          if (r) onText(r.data);
+        }
+      } catch (e) {}
+      busy = false;
+    }, 160);
+    return { stop() { clearInterval(id); stream.getTracks().forEach(t => t.stop()); video.srcObject = null; } };
+  },
+  // friendly popup text for a failed start()
+  errorPopup(code) {
+    const m = {
+      nohttps: ['Camera needs the secure link', 'Open this page from the hosted <b>https</b> link, not from a file or an http link. Until then, type the ticket serial instead.'],
+      nosupport: ['This browser cannot scan', 'Use <b>Chrome on Android</b> for camera scanning. Meanwhile you can type the ticket serial instead.'],
+      denied: ['Camera is blocked', 'Allow camera access for this site in the browser settings, then try again.'],
+      other: ['Could not open the camera', 'Close other apps that use the camera, then try again.'],
+    }[code] || ['Could not open the camera', 'Try again.'];
+    return { tone: 'warn', title: m[0], body: m[1] };
+  },
+};
+
+/* ---------- sales codes ----------
+   A sales record is  sales[serial] = { st: 1 (sold) | 0 (cancelled), t: minutes-since-1970, ...details }
+   A "sales code" is plain text, e.g.  RUVA1|S-001:1:s8x2k;D-004:1:s8x3q|a1b2c3   (safe to send on WhatsApp)
+   When two records disagree, the newer one (bigger t) wins.                                                   */
+const Sales = {
+  nowMin: () => Math.floor(Date.now() / 60000),
+  encode(sales) {
+    const body = Object.keys(sales).sort().map(k => k + ':' + sales[k].st + ':' + sales[k].t.toString(36)).join(';');
+    return 'RUVA1|' + body + '|' + sha256(body).slice(0, 6);
+  },
+  decode(text) {
+    const m = String(text).replace(/\s+/g, '').match(/RUVA1\|([A-Za-z0-9:;-]*)\|([0-9a-f]{6})/);
+    if (!m) return { ok: false, why: 'format' };
+    if (sha256(m[1]).slice(0, 6) !== m[2]) return { ok: false, why: 'damaged' };
+    const recs = []; let bad = 0;
+    for (const part of m[1].split(';')) {
+      if (!part) continue;
+      const r = part.match(/^([SD]-\d{3,5}):([01]):([0-9a-z]{1,8})$/);
+      if (!r) { bad++; continue; }
+      recs.push({ s: r[1], st: +r[2], t: parseInt(r[3], 36) });
+    }
+    return { ok: true, recs, bad };
+  },
+  // known = TICKETS (each may carry baseline sold flag .s). Returns counts of what changed.
+  merge(sales, recs, known) {
+    const out = { added: 0, voided: 0, same: 0, unknown: 0 };
+    for (const r of recs) {
+      if (!known[r.s]) { out.unknown++; continue; }
+      const cur = sales[r.s];
+      const before = cur ? cur.st === 1 : !!known[r.s].s;
+      if (cur && r.t <= cur.t) { out.same++; continue; }
+      if (cur) { cur.st = r.st; cur.t = r.t; } else sales[r.s] = { st: r.st, t: r.t, imp: 1 };
+      const after = r.st === 1;
+      if (before === after) out.same++; else if (after) out.added++; else out.voided++;
+    }
+    return out;
+  },
+};
+
+/* ---------- small utilities ---------- */
+function downloadText(name, text, mime) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: mime || 'text/plain' }));
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+async function copyText(text, why) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    const ok = document.execCommand('copy'); ta.remove();
+    if (ok) return true;
+  } catch (e) {}
+  await UI.modal({
+    tone: 'info', icon: '⧉', title: 'Copy this text',
+    body: (why ? why + '<br>' : '') + 'Press and hold inside the box, choose <b>Select all</b>, then <b>Copy</b>.',
+    input: { rows: 5, value: text, readonly: true },
+    buttons: [{ label: 'Done', value: true }],
+    onOpen: x => { if (x.input) x.input.select(); },
+  });
+  return false;
+}
+const storeApi = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } },
+};
+</script>
+<script>
+const TICKETS = {"S-001":{"h":"5daf43a3188a2242d055ca5b2db29d047f428eb3317e28426753ebc5e272be93","c":"3d184d2faf4a332bb873da98cf028d838b1fa3295d6485479c82aa1dc23fc0f0","t":"S","a":1,"s":0},"S-002":{"h":"de5167fbfb1c1e48ab0a0c7e8d8bb7ac3bb3b253e4e98ab6e8c1215936d5bc21","c":"e29b9c0d07127652431e6d7fe5915769bca4ae865cc26282a2a949b47275e8eb","t":"S","a":1,"s":0},"S-003":{"h":"0e5efbc590ce3e9d9b6084a524cd65634cf181634d1b0fd3b6dcf61bd52a464e","c":"e74219f3835044249f5c03d26663c37798a61b94a4f09f517cb16bb0d7a2b435","t":"S","a":1,"s":0},"S-004":{"h":"fe46b951a6ec7df94adbb5f2c42f484f3b8125635f982b529812d7684ad61ecf","c":"40370056de8e6a8d55306e6f7e485ab2c176b729bc22c9180050581b7e956c5b","t":"S","a":1,"s":0},"S-005":{"h":"b0698331e5bc1c8afe32e31c602d6aabd122b0626c9fda062953085d578c5403","c":"0bcb928ca52619c01f779f93da2f2ba2a1f0acb41ab25c9d299deebd88fde004","t":"S","a":1,"s":0},"S-006":{"h":"dbe743d7a50d84d997fb6fac80a8692b0f16ea9215f04de52bc4f439d8c3b948","c":"20bb7c8a4d98b83f05ecb1e87c7525757be9eb9d40c654a6c1aa185bc670b940","t":"S","a":1,"s":0},"S-007":{"h":"e5bddbea930a5f91d9e5ed8294027588221d762263514ee04483d3ef99457b88","c":"fb47ef642d41c09772426c42a86b1c5912aaeb8a6e32042fdf993fda075eb30c","t":"S","a":1,"s":0},"S-008":{"h":"07c2c25315d59104a829450b8a3e03a57219943759d9145397443d4615de9f13","c":"febfed353e084d977b4f5cc8020579d006ea7df37e1b96fcd6a807a5335c3b58","t":"S","a":1,"s":0},"S-009":{"h":"f28f23c43f5c2aad3c3b3db8a2e1c63ebba3d9ef669f466220a662e2a720281b","c":"1a28c878268a3bdab5f3e1b284b51bca291db911ab8cc56d9fcd22c3f63a9f7a","t":"S","a":1,"s":0},"S-010":{"h":"22bacba41d8c8a1fa2ef3c728b62af140d145507d698f36b08273a231387786f","c":"02d4d9cdb8c551dd2569e491932cd086c1ab1502ee973fb635a1df7ed5cca071","t":"S","a":1,"s":0},"S-011":{"h":"dfc1ea884265acef7520c894dd8a78267016243ffc0e36c3b4841eef05daa83a","c":"09bcc46bb5a3a9d0ace2660b3948323b63d98014b1f800b2472ea671d6b139ba","t":"S","a":1,"s":0},"S-012":{"h":"350769fab548c3cc4db5a126c5fff057960658cb638207d218be1b20eec366b1","c":"f644f4b95f2fc302cf69f70d14e4f7c2487e4a5600acd626644ce52e959e5345","t":"S","a":1,"s":0},"S-013":{"h":"3b9f8c514b35f61b84f5561f196d13003a1a91cef2b30a75be9e33e51220d6d3","c":"8fa35391f73501a43d8aa3a6dc0dc73d1a05c1e0908f7da4b36d232b2a8edad0","t":"S","a":1,"s":0},"S-014":{"h":"f225c41313882e682e1773ec92423927b0dd73a854a48126bb94e9c9ea7e3c19","c":"2466a8821a59a70ab495d90c42cdf17c5dbd34b78309cf2e439b13ada8e7ac35","t":"S","a":1,"s":0},"S-015":{"h":"4dc243c7eed93f35e9af19c8fcf62f85e3a843951891d73258b12d168ab43574","c":"22c13c34ab5029b83f1cb21f33199cde233bb7d51240c60fc445395c437aa17e","t":"S","a":1,"s":0},"S-016":{"h":"abcd8c491bd80a9de7dfb5115320bdbfa171b864801d849e7fb9dbf38d35685c","c":"5f61d32f7d879a400acef352ddf4d0564166cc87adf4cd10296bf56c7e1b659c","t":"S","a":1,"s":0},"S-017":{"h":"a8754adbed629002cab4794a2d8b82bae9980dc534ffab7a9e7808f910f0f6ee","c":"9c82a08ee7d6550370d73bcea46ff11a34de6081babee545a6f002df92f34695","t":"S","a":1,"s":0},"S-018":{"h":"f981cd6ae6188e0f095cb32b71257bd869aec01bf145101ff91c38ea4cbdb725","c":"2a8d7acdfea2c93f91fb7cd830c317582e490e8cb091db2705cd7b792d2e23cd","t":"S","a":1,"s":0},"S-019":{"h":"5cf3e764c7d01ad68af7939703a05586c62667f75488f60bbdf2afa75305dd66","c":"213ad414b9f4e02544bb467c24fc95582980ed148864f546d6a139cb5868528e","t":"S","a":1,"s":0},"S-020":{"h":"480276899a9d3970065156e33a25faa69c17c11d5243a537e5ab8eed471f84a5","c":"670754edd80049d5f5b617e6145aaf4be3af23c3f1fb50d1e4f3b16dd9d4abaa","t":"S","a":1,"s":0},"S-021":{"h":"c1ef04a4a68d5c36e51c9269a6b7aada607361756ae12df20f9ca6c500c7fac1","c":"024ad769670367755dc3f78f37ab48de484781feb9498a97ce1fc4bab18b4b73","t":"S","a":1,"s":0},"S-022":{"h":"e6b7be94c61b55d511cede09b91c19ba612c85fe98f9a8ab835026d06c054c58","c":"c89332009d8923ffe058991e587d5ce14b7d5c193316c518bc0f7a00b91d738e","t":"S","a":1,"s":0},"S-023":{"h":"880e11fd64c1d7bd0df716995c42c2df174ac8b7ee6c075c907f76e2805fc6a5","c":"a5c3bac416b5c4c358baf7cd7a4c0ad9ed17760a817741cb10e1520f27fbcef9","t":"S","a":1,"s":0},"S-024":{"h":"08ddf27793b3c4c1983c4f3c522744bac42c0d859210b4c212ca9d078412cbcd","c":"0155ca45ee0a98e9efe29355bb8101a8745591c160ac81677867ff36e92cd34c","t":"S","a":1,"s":0},"S-025":{"h":"3a4165c21d9e09ffc31e25d5dcb0f66205375430601bbd3bbbbd7ac37c854857","c":"22ec50dfeafbef020b6dddea21bfdfd60e4fa2fd9896ea184dcb8dba930ccfe2","t":"S","a":1,"s":0},"S-026":{"h":"5d506a569841c17b7e6e415179327c32a3dea0b47e64828acddeeba48c31ff2e","c":"d0be6a1d6be489c4d4c63a8ee6b29d0b930ccd1e3b6c68b5b5be99ed20f4b367","t":"S","a":1,"s":0},"S-027":{"h":"805a1620b66dc758a1491578c5defcbf2874c51e80931e3d06ff92266f90e5f2","c":"67cdf334dda2a1280b7c57f2658c5ac2aa0bcc38bc3853842748dd571ddd7a59","t":"S","a":1,"s":0},"S-028":{"h":"34ca68e47e3a9cd5ed50102b847ce771233a6488f8a9a68070bd9eaa598e0686","c":"0eb4110ffd11d83502f564ba0222bb69e75e1f2bdfaf692bc46760cd004d7d84","t":"S","a":1,"s":0},"S-029":{"h":"a28d74449e71c3e811e11f51ed9f304563c8301a9ccfd157fd3b856e830045bf","c":"370fb88781ba843682b4b27a20797d354b1f99bf06990c9a20cfaea8d1747cdc","t":"S","a":1,"s":0},"S-030":{"h":"6b0052cf07a0aa91950d48b97e491ce4b49b1694f6b9d5ec8905fe0ecdbbf361","c":"91d2470c4d296377cc8b2597e2f4aa71fd84a52db8f84aebd7d318c3bc770521","t":"S","a":1,"s":0},"S-031":{"h":"362630980ae324312043110b54738c9e869ce6580246732ff748d9c29e6b6862","c":"50d2c6dbaacf63a442f2619cb34dfd394a045bcbe6d881a0acc6a6d5964cc62f","t":"S","a":1,"s":0},"S-032":{"h":"18688025cf5627d33d680344c4dc9b6c05df6533facd85f897eb971e1eb6b295","c":"b3fbebe629464c037d0e59ff3fb155c48966a2817f3600950f8f20f23dec377e","t":"S","a":1,"s":0},"S-033":{"h":"73b2c406dc02b9cc1c47efc3d9e4ebfa47bbf3aab4f9ae73f44d7ee133c0c32f","c":"967fbdad11aaa6f33d4c22519ea80873eaa265d63ab087a144e746d609dceb6a","t":"S","a":1,"s":0},"S-034":{"h":"8fcc4f4fbc14ed0e453f1df62ee2c3f1883f9258f9d26949a3ef8c29dc03c674","c":"36abb6b0f209ff4b70e45a6e2743ffe81835b12ce9eb5b72d8ad2650505a45cd","t":"S","a":1,"s":0},"S-035":{"h":"9cda9b07d3d17a0ae95b30eec8ce683ae5255ef2a08d1d4620a1fb3a1a3e1d8a","c":"9989af66132b0ab993db2b4ec7eb30abb5dc1ed5f75f2333c34f5f57a02e2011","t":"S","a":1,"s":0},"S-036":{"h":"93a6c1c971e0817623280833f4ae452268560c438e2117522d9f1eca9f85f584","c":"8aa3cb38b062f9ecefe3e426b1c4aebd4cc6941feaf6b845d8c22dab9f78b8ee","t":"S","a":1,"s":0},"S-037":{"h":"b3a7af6ed35d5cb019984e7da4cf966f663334ec40dc881aa6dd173c732a42e1","c":"345bfeddc234434a55e81f8871d908e9a7902953db8f4c43df72f5dd4aace2c4","t":"S","a":1,"s":0},"S-038":{"h":"e361ff1461146e0d762562f4c4dc2596727c52edfa143105ef1a7bfe59948953","c":"f4090e07e8c92dcc693efe5fefd5558fb89a9154673f9708b3f5d2fa0b3a60db","t":"S","a":1,"s":0},"S-039":{"h":"3a34fdf4df7d3105518d051d51d942184c620edc51d7bc0544278d60f6974b52","c":"af3965da6d44a144789880b48da157aaf59b8bffc76ff67943d6eb72de6a5af9","t":"S","a":1,"s":0},"S-040":{"h":"9de69f1cc5a6847ea8965e0bacf1d06875ded3be586b5e3ba82a7b8eda25baa8","c":"ef40335f4707197c2479804b71d776e5ae319688a88b625801839b583b97f70c","t":"S","a":1,"s":0},"S-041":{"h":"93927b15f52a0e62fc32d220da8098ce2c0c49550140bb6c95f1bbc5e183f852","c":"742fbc8548f7e0f946f808b04d7e12f4a9e4c530efa52f70dbf30c02300e8841","t":"S","a":1,"s":0},"S-042":{"h":"9dd092c24bc82e02fcfba7e3c63f34b766d8d0af64ba7293ec01e9f0dc257664","c":"a51022bbff9346db0e0c2e6fbc75f4cd6f2776877a85d18dec94b9f3a0c3afe5","t":"S","a":1,"s":0},"S-043":{"h":"0d81cb0d76224a56b0b2ce28a05f5be01fca4f3c84f8c14f7208ee96a5466887","c":"84f4f6e0dec1306fe5719fad714f6ef8cef6dd9dcb6c2b8118e65f3fdfbb9ae8","t":"S","a":1,"s":0},"S-044":{"h":"04b9848aeee4458d5861379bb7b52196499af75269059aa86a2a81219ed0f0ec","c":"f1948a9d23f9b2526aaa1497fadc2304742155aa8a8753be75e01b4ce120653a","t":"S","a":1,"s":0},"S-045":{"h":"b30435ffe3a2d3cc0c224227b1bddf101e973701356048435c8edf1ecdaa13f8","c":"e44a2e017a3b4f4b549bf430b2af3801cdb0fe9698f43cf35914c97c9dc1ecb1","t":"S","a":1,"s":0},"S-046":{"h":"f14bcd45b493dc73e30cf2b7a3864560d10d36010f16e4b3562feae57d611af0","c":"c9519fd86939030b42e7a3d0ef2af01a4e684a5d755a3b27675fe75d49ca6377","t":"S","a":1,"s":0},"S-047":{"h":"c34fd7295a4930afcd96a885cb9a088de1e3b8652f828bbbab0bc4cf873d7ac0","c":"c20f722daee5db73872532aaccdd95b6eb600110482d43630e01e35baaf6261f","t":"S","a":1,"s":0},"S-048":{"h":"934b12179b23f5f3f0bcf32b6bc61f878ab90441d42ed8f2055fe4bb9ddbe244","c":"f310c13d4bd300b8b12a6d0bee53f03979bc0e1088ea0a0efcee545d9ead6d5a","t":"S","a":1,"s":0},"S-049":{"h":"4e86e0d6718b3d0d7540b0a6035e3e226fd749086811fdbe08027b3a0f4f07b8","c":"4f5b6b1c26aac3ec7839e6d814b268b66ce9dd7ecf7abeb547105fe15336523e","t":"S","a":1,"s":0},"S-050":{"h":"6cd49637d9827ab4c9e1d15abc78d78c554d16d4aa7233d48f13a7e838465dd5","c":"ac45076422f7eb7e822d013acb8fc433cdd6c3444d889e5cf94fb60d38f32fed","t":"S","a":1,"s":0},"S-051":{"h":"449569ed657d34ba58b63f0e605679382a0eaa87d6d2fda5316c51b7e00a379d","c":"24a5f6cddec01d66e7008ee843561f51a2d867b91f296962d5835cea1203274b","t":"S","a":1,"s":0},"S-052":{"h":"56d15f04108148b24d4e36a230a00285aebe534bd91913c922857725e4b8ccbf","c":"14db107c4d1778e61641def64e18c64469099e287b50e415bb3b7c4813b1b3cc","t":"S","a":1,"s":0},"S-053":{"h":"8341d0469f6251dd8bbc2eb96d2ccca04f7b3024b0509faacee7217bc80be288","c":"0e8a50d8c70a6bb7297a25e6232a83d4705b200b1129835a30ced94d28dd3328","t":"S","a":1,"s":0},"S-054":{"h":"206225c0eba2a3dda9db8ecc165b1c99e16fc005cbae87d726973c92a6e9f217","c":"c0cb9877c3d510a3bb39ea5cda7ac8ff3692b0867921a0c8446de8876add3d12","t":"S","a":1,"s":0},"S-055":{"h":"b7ace01ae342f7d638eb4d86647c61a9c64b483ac045b27d80d891a9476de311","c":"897cbc2e48c6edae1016a4994a456e62c0420dfb7db4161ffaa5d92634b2f067","t":"S","a":1,"s":0},"S-056":{"h":"f6ed435ef731feb2b1df04f1b41f05bb9185357631c71831a312e4cfe8f6ebe1","c":"0e34bf7c2f19a39182629ff1c39d40c6cf9a3964e20c2c324e87eadc4d1bfc09","t":"S","a":1,"s":0},"S-057":{"h":"53b59e0e9a302ba9d25a5568ccbd3627d219df791587ad3a1fc58f39682a09cc","c":"a00ebf7e94049a934ac04eaed3622402320f4c158b86cff291cd37b019900f2f","t":"S","a":1,"s":0},"S-058":{"h":"2e7e35b407c00a0206ab12d53cd63de7c57ab958ece2aefba2d368d39aa1f12b","c":"8df183ea11cba8abd91a0d98ad9a5b613098cc5651a659559176d8feed6190d1","t":"S","a":1,"s":0},"S-059":{"h":"e7ac83e7e77809152c50dcdae0e4198b50dc27c3d54cff5bbcf2b501c90124d2","c":"c0ffeb769e71416fa40ada213f9cf2c032721ff5a4b9495587c69884154e23e1","t":"S","a":1,"s":0},"S-060":{"h":"ba65b55177230c4ab26812d85094c28d59e323e5d3f1beba810345a1d8834d9a","c":"cff3ae3b9af35c927622cf7974e88c2012188e116c0d25ea4a06570f059408d7","t":"S","a":1,"s":0},"S-061":{"h":"1d345c066fd8e1aaeab256709c05ee3ac76505aee1b1108531f23cef3df3e34b","c":"122cd7007f954d30e15ae5e0c8793987c47ac2061851325d2c373b8d70edf2f9","t":"S","a":1,"s":0},"S-062":{"h":"600b9db9ee336bba057b0cbbed22ae67fc05edc03b8b5006d66e205e0dc91c89","c":"0e6ea803b39188e31be999353962981fb206f963f9fa7131e73bc961fc740fe4","t":"S","a":1,"s":0},"S-063":{"h":"6fc7aa2caaab6d8b08ecf1be5cc1c7bc4a776b6f92feb7904b65d372db646572","c":"686f7ad123d1fddbeae38fefc99549b93e641c00bebfc8e08b38ab1c4bafcf17","t":"S","a":1,"s":0},"S-064":{"h":"79275f08a4efb76567265ca2ee66d76adce4e54eb5406da049a7d5bc46c67783","c":"739cfd60a275ea8e4af5fd787d697abbc970e3be7d0b03ce8b0a28738c8fbe7e","t":"S","a":1,"s":0},"S-065":{"h":"99074bee119cd56501e70eb31059c64bb1939fb760bf3112092fba4da70378fd","c":"387c1eded52f6247622cd66d906c9b060a83188ecae8ac60478121826d4ee06a","t":"S","a":1,"s":0},"S-066":{"h":"aa97dc06206e839210bed5d147c6b8677fc4c022f486ce538d1d1c3fa2fcfbc5","c":"4c03ec2b736b217db6444628d8ffdac0676d16c20d6811ac94a12e225817484f","t":"S","a":1,"s":0},"S-067":{"h":"2f476d795c9e7cc089c6b72e3773109bed7221e832738ff0b40586e1731d4d10","c":"83bbdc888dbd7e1de40ed288b8ea19803dab3dddd76b3dbad8827655d2a8394c","t":"S","a":1,"s":0},"S-068":{"h":"69981f99a166fe65db9050c05e839d908ba9f6619c5221b279cf862c79354830","c":"61cdebbc5809d1fd820d68bb9a117122348a2697cf7bc1999b5e40f3f38334f7","t":"S","a":1,"s":0},"S-069":{"h":"1eba799114e2e5c181a9baa3677fe401a585860890a7b617aeb09162c5c634e6","c":"d41d95c1302eb99f35d014ad83e8ca36aedb79792d682562c1c0a7d329534672","t":"S","a":1,"s":0},"S-070":{"h":"f5c67572f79d4e08403ecaa149202bbc5b22e8fc36e02bdc59ff9025aa9ca4e5","c":"ba6f2810ec3746e44382e998555dbd045b0b488fb07bd65b2028b3f91597e60c","t":"S","a":1,"s":0},"S-071":{"h":"02054d4f9b8ac29ae5625f3ed0c6c726c118dea2e5366c53636ee5cbdaf5c432","c":"266992e67ca98d1f5acc8665ee64883dd5e74b7aee00306a2cd5c3c250dc63e3","t":"S","a":1,"s":0},"S-072":{"h":"b3e49e468926094760f35db4deecb131207285aff3748ec914e4e74901887352","c":"bf5f041b73b9ae43627c4bca4a499d810da47a48b40462e63c9af390c39b163c","t":"S","a":1,"s":0},"S-073":{"h":"f13a69765806eaf0caa416ac333a5b0201da3c78b81d2a31f457db74fc211421","c":"6bfddeb2e306d1f73d10a3a34f3ac91a110655506039b06de0662f545c5cd952","t":"S","a":1,"s":0},"S-074":{"h":"6b12edd7fd0fa293cb8162931e13634944e51ba48ca591d9addb5fb5b1d6921c","c":"734114a232c334aa7d71b319747c60090731bb4222ab93d24f61c12ce1b0e16a","t":"S","a":1,"s":0},"S-075":{"h":"1fdacfd1aa0c3b0f94fcf35cfa16215a50a89b79c155fa682f47e072f7511e7c","c":"1196229845480047f5322657d6658d163f6ee63d0ae0e9e943b97fd33a563679","t":"S","a":1,"s":0},"S-076":{"h":"0c2b051ca0f29d8df3c1278135a3d792f2865fc8271026fef7ea0f1868c6e2ed","c":"7e80aecf322a8e792c2f65f175f2b21dfaac824bd5a37d3dc6600995f8ff12e7","t":"S","a":1,"s":0},"S-077":{"h":"05be67484aa7802da47df86af22aa775d7d79d20c2fceb7389bf7179a9ad198b","c":"cfae5969b9176cb89482afe6d877e2aac6ae15bd963507bcb4eab70402363937","t":"S","a":1,"s":0},"S-078":{"h":"0678469fe650d7ef5c5bc7626106a86d36a95c0a11547858664ee18164bcc08b","c":"da28d98f3628bf0af045aac1688d50770723b8e0f0025ccba5b1484cc41d0df5","t":"S","a":1,"s":0},"S-079":{"h":"8fe13b889ce0420d285079162e03970b06b33d228a6eb10b1a5cef80caabf7e3","c":"c0570e598dd0e181ab65cb5b2ae421de9921c8b52bb3d81f257b4b5908f5b279","t":"S","a":1,"s":0},"S-080":{"h":"d3cc9073c4f0ccb9c3ba9fc731e3de7a0127224faa99903b337e467e1c2ddd06","c":"8972ce0390596a74eb89fe0433e677a754ca99dd0284e60254ccd2c65816c6fa","t":"S","a":1,"s":0},"S-081":{"h":"cc7ce1748de1144e1eaf911795be863113032bfa92759be83fa6293c1f4f2d4b","c":"6acd55a9f67defeb48981fd786d54ec51d04bde9d31480d508805bf92596f68c","t":"S","a":1,"s":0},"S-082":{"h":"b934d495d79965fc3e940afb52b0399242b16dc4cfbfd5d9968e54bdd90e2018","c":"e836811e16734e4dc9a7bcb4714cc9299071ec865e2454933267b2dbe27cd824","t":"S","a":1,"s":0},"S-083":{"h":"3219f07bff4c0754de0aea1da73fcf2011e57a06dbcabea87789a49c27ad9a68","c":"711d0ee48a773c31615cbcc58f4c11833caa68851fb6457dd7920bbbbec462d6","t":"S","a":1,"s":0},"S-084":{"h":"d9eb6f1ac411ba694da16b4a96fbad2571a0bddd9f876688f0be8adce46bdda9","c":"480af1be3361477348801808b9a69b7f3e9e77b19fae36528b866a8da07dff9c","t":"S","a":1,"s":0},"S-085":{"h":"1f07eea9fdacfa2b65914772cdaddb19681135210dbe6b39a3f3eb2a508c952d","c":"633ff4583e09d2ed1ce322284fa94fb991d4e20286e27c05aad537c597a1b21c","t":"S","a":1,"s":0},"S-086":{"h":"a8605eaacb143dfe625aa40ddadeb58bb8286938b92d9e152e01b0f6e4d6cd88","c":"4cddfd7447c6838b673ae665a4cbcbdb5eedf7515ebfe98e4fb29d6a71ee1583","t":"S","a":1,"s":0},"S-087":{"h":"3e7bd94df0d03e4fb81f330e8ebfea1e364354d7fcc4e243eddd8c02a787986c","c":"97a655c569bc87e7191841108296b03d506f6cf443ce0b223c60a896eae7ccac","t":"S","a":1,"s":0},"S-088":{"h":"8ec31d37885611576aa3984bdf63ae87799fc41ac1c67870a88723515af2e24a","c":"4766237721f46a6c657381aa04f251c60695f2285cb73764c5efc5a15986ebb6","t":"S","a":1,"s":0},"S-089":{"h":"43348e008b1dcd4d6dcea88239b7536c8cc7a8718b2f9650ed2ed6ba1288bf4d","c":"b47823265e90e4575e6286689abc87e4adf1668e5484e5fd891d64c9487fee1f","t":"S","a":1,"s":0},"S-090":{"h":"516853ce3c8b06cd1f25e558526d2895c76f50316872e9fa3cd254aa9e311498","c":"e156c3ffdcd6bd712aca4f4511f3bab9c9ece9993921393e926f22844df83f62","t":"S","a":1,"s":0},"S-091":{"h":"27aec624211adb936af9d7b30bbabae24511760054ae47084af7e725905d2ff9","c":"aa436e27d43cf6d34e2e8b0f9aa44a81ece922c3d9d04512cecb4e2d6bc24c73","t":"S","a":1,"s":0},"S-092":{"h":"677b78d2bf348041015bf85fdc91324306e95ace29fe94d13367783c2a152a35","c":"73132499af80bd0de3d5d14d7e1b28df30dc90cb744da7c3e688979c2e587c02","t":"S","a":1,"s":0},"S-093":{"h":"ebb6ccd6795c50705c7c1419c18307345bf5ba4e3ae6d0842e00902be242ba95","c":"a865223c43d6d6083b64f06d72095f309cecabb8ee751a8e791e28849fcd66bb","t":"S","a":1,"s":0},"S-094":{"h":"6346c675c49d1b615b765f7417966ddcd2da8a7222fd1720474291fb53a1b43a","c":"38ca5ab86ffc481bdff264bf09a7a8d1ad3a5ef471efe6c9c6935aed57c926e5","t":"S","a":1,"s":0},"S-095":{"h":"d83ddf7f04fd906d5f3e687bd0448418f510dda56a6a48319dc51e074da611de","c":"4e2abeb2f28b310a5a29c24723babed3f74cbe9572071e6576264674b112689a","t":"S","a":1,"s":0},"S-096":{"h":"98adf63323f43e23b9a41843f916d209888e1bcedf3093f0844020ba8743490e","c":"c93ae3e29184bad071638a5e958ab8110de5a14ff5fdf9352ce63f9b37d14dcf","t":"S","a":1,"s":0},"S-097":{"h":"1173397d19a989c7a47b70f65391cb1f6f44aa5a0e5b6facbfcf30eab1f1cab1","c":"2d9443dfaf396f86a9ee80a9138d39441a24034b47569d9a04bebd11eb8930d2","t":"S","a":1,"s":0},"S-098":{"h":"ca5fa55bdfdfe055813189528f096aec08ff576d4f7927585936fef574375b44","c":"3572994e1e5b29ae3cc72caaa5b8926d27418a52a39b43bbd270e0cd8279d22f","t":"S","a":1,"s":0},"S-099":{"h":"06eb35475577916e3039a463f3fb7b28859e9836e9b37cb7f7daa87f9ad06265","c":"f5ecd0d9554779f2e03cd59c39e5391800815ab0b8cfc14662f0d37c5f6ff9f2","t":"S","a":1,"s":0},"S-100":{"h":"2aca12a6929f77bcb2660137164cc95fe4e4e6bb0bb0d0f008e43d7f73c00e29","c":"0ce6f0a24c5a5b4bf957abeaf75c59ee7b7a09d1d6b316f0a718fab9f4d1359a","t":"S","a":1,"s":0},"S-101":{"h":"edd120440449baef7fe5c08e473810cd9b2921fae99f00a631b041210b54a9ed","c":"00abda717cf18cb3851f499b28525c3ad82ab9313fa1595d5447f81deb910ddb","t":"S","a":1,"s":0},"S-102":{"h":"260eadd68b56a30ce927882256a02d49af9793cad0b471390578b6b3b0054ca8","c":"085002ebe7bb172f0c27761dc2d04135689d525c918902141a5e866c974d9fc2","t":"S","a":1,"s":0},"S-103":{"h":"9aef11186d5c739aab3040df7528e29eea3dfecb79675a16f60a8e4cbe8e043f","c":"631375dad4993d5177d9dccf2f1e93c0ae669928b91ce3fa08d892726a8b373d","t":"S","a":1,"s":0},"S-104":{"h":"da59036adb8d708bebd1fcee93d2c159a15a91863d6c732e8309b80f9018918e","c":"8c0ccfbbb2a5c3c97b488a1078a476c9d0d69c228eff4d4b3dfe7d3e5e3a27b2","t":"S","a":1,"s":0},"S-105":{"h":"1efe6393f0e066e46dbf807a100e96eca0c5492d281c01bfd2aeccf4f59e2a54","c":"4ed496c47f7de1dfdf7d364ab353953119359b736600dad86a4841574bec37e1","t":"S","a":1,"s":0},"S-106":{"h":"79871828ea40b2c0abd271f17b8e2812ce83f3257d3a0633532f9e5f8dfc20e1","c":"e71e62e5c4f75302dce755d274a2ab4bfc2983d5d1db769721670c20f7c2e80c","t":"S","a":1,"s":0},"S-107":{"h":"ab7d6b09c66f68e1c61ff81c3748ed4e49db10d3f733376fd56775b05354c770","c":"a72d70dff5fa401d460920054e900fdec1e1b0b909d2da6d220d929bf9476bd9","t":"S","a":1,"s":0},"S-108":{"h":"9c63abc7d588d489b5eea049e86a1901961b8741aff64ca91ac6653df8e62c1a","c":"4f7d9f05f37b83d7238e34c8f886e5120e398813a8e11c8bf14a560b6d42f30f","t":"S","a":1,"s":0},"S-109":{"h":"a9cb2cbdbf9db6f5615ed23af93a29e537b91754eb6bd2490e04fea37d503331","c":"57f02b3f1e442ddbde0767bb6e52d01d22fffd87a8b5ccb89eaeed583d32b190","t":"S","a":1,"s":0},"S-110":{"h":"9f81b9b09b33db0244d5cbf6a39fe58382a79d00acec3ea0ebaad9e59d1863ed","c":"5a0f2544e038de3d3468096ad4e7225c575bb928e9b1d48995acfc9108efbab8","t":"S","a":1,"s":0},"S-111":{"h":"e116cf064a4be7ed02dff4c290d67aed5de531d501eeef5308a18a32688e89de","c":"0ab1ac3587279f127bfb9d8ebf9631f5b2a935563a11b871206f12f64d8ac26c","t":"S","a":1,"s":0},"S-112":{"h":"b4dc50aeae5f41afce6837ef44bb89f72eef1cb928158f3801e36e0e8cf6bf0f","c":"f4c07415e91675e8308a8090514c2b06cebfc6cddf58eb16d8b650cba53bbb74","t":"S","a":1,"s":0},"S-113":{"h":"72af4b3b601b90f01298fee02b99181b5e9be98a87429a6e4d6a786524ae68ed","c":"de8c70182a23cc3c975d71294ba7c66dc55314a501188ccc48976f9c194724f0","t":"S","a":1,"s":0},"S-114":{"h":"1dd1132dc9dc6a3c09fd3845db59a011cf98cc312a6dab3c67aef388918f100b","c":"f47d66ec6a629d976583c25b2a42c1f1634e1be9907ad79b6992190706555ac6","t":"S","a":1,"s":0},"S-115":{"h":"939ecb583ba9738ace98442d0b20fa99ca6e31cc787699a08c30b7d01bac099d","c":"7555e56b78bd374ade286507fcfa0fdefaa67179b115e273fe5b2817ed7da503","t":"S","a":1,"s":0},"S-116":{"h":"f6d3e10768789f20435ec8e7fdae1943b9d2ae48437b4bb90d0c95e90b9a8a2c","c":"1ee75442e2eb10c865958d4b1dae554cdc5a2cff0bf3729229deadf7a2cd40ad","t":"S","a":1,"s":0},"S-117":{"h":"d5cd6cd0e0fb656a8b373e93d8770b7571c4e2d07eb22263f64d7279328546a5","c":"864f0a24bf4a05d2ce02be1cbc9474bb1e81657834499092cd457bf7118702e6","t":"S","a":1,"s":0},"S-118":{"h":"7abf3d41c4d50cc726e64eebd17cd98d1ad139eaebe86d21b320c21b2d46c51c","c":"03e6acf26e8eec7ef0d58eb1d3099b15e862142d6ca17b58c00dc62ff7aa2d63","t":"S","a":1,"s":0},"S-119":{"h":"4deea81bcf45e16874a7ca8e2af93f704f23beeec125f2c674e76a436e03b012","c":"129af68ebcdd51eb33eae7887485927f3382dc5459f08efd3329f5dceebaaf62","t":"S","a":1,"s":0},"S-120":{"h":"d00a92036b87ffcbeb63617b45b745a7ef9e17dfb8b2bd558b7b0cd6ea983474","c":"a19729ad58a7de4cd8fa2a57d0086245f68921bc5bbc5397bb0ac1b3227c020c","t":"S","a":1,"s":0},"D-001":{"h":"f722f44bddbbe8183df50aea0242984147fb469e84f5fdf201f609bb9eba2554","c":"7487963ad0cad6e192fd790113bacb89661383637c0872878df44cb84d9a837c","t":"D","a":2,"s":0},"D-002":{"h":"d49a0e8891bc04c277d849a602245cb1581c6e6864333f5db26bdd95c325f422","c":"b64bbbd0cbe3cccef2a85e53c9ad46201b04c633e89628e4cc0fc8a3851d3493","t":"D","a":2,"s":0},"D-003":{"h":"8da82e587181423e34467e775cb0c2a6e9a43a6b22ea6576df09edda38289a25","c":"eb8a1cb64904947f2e5427f80764745c612731087058bfff56ff1069886c4bd1","t":"D","a":2,"s":0},"D-004":{"h":"2c6de2c07e93c228e3d9a652822f81efa3e585acb23618b8fc812331e4c20a37","c":"feed27ef4548aa5ab94e7d1ddbcfa32702b7cc59b1320415f167694114b51570","t":"D","a":2,"s":0},"D-005":{"h":"190add711158f9f6db284932b4006e0246f853280f50f481af2c421c6e12d2ec","c":"969cdbaa1d9a6c16c337d1f7bf5b97d651d2addda8679e3387cfb0c6d6a49623","t":"D","a":2,"s":0},"D-006":{"h":"dc74faa87bad6cf98d070b8031f17b526cfd51be0917e7efb7a6c22205ccc767","c":"170e982cae933b48c85156659719d73fcc72f9e687eb8c5a57d9dbd7deae449c","t":"D","a":2,"s":0},"D-007":{"h":"95e0c5b08820c4ca343e79bed954305f17e206034ed1b8b4f7b71a9815b4fc8a","c":"842ea93dffdd2298d5de32a6416f01a5eef815650ba29983973d417aaeca0727","t":"D","a":2,"s":0},"D-008":{"h":"007ebe7578ecad42754d98116647e2317c3e6cd212e88f8bf8cbe74157aaa6cb","c":"9cc886401a9f62ed00bdabadce6fe162180d2f26129819ebd642885108006db5","t":"D","a":2,"s":0},"D-009":{"h":"7ffe92f592c616955f89878d18260a3121208e6f06b4cedbbe8cba18c01fd3c7","c":"bbee9405e4300244c63b4a32a3124aa5bc805a2719b301b3d35edaea1c9ec9a6","t":"D","a":2,"s":0},"D-010":{"h":"65e376e988ca9bdd23d07c413f14f8ae42aa983fc11570d947af0c6d0d5cbb26","c":"c69e62cbc136704b7ec0143265a11d805a1d8dc86ad5f693c7075bdfca00ed7f","t":"D","a":2,"s":0},"D-011":{"h":"d5bb863f1b2c3ce22c3d12e6e9bd5031ce8db08e4eadecd6e5778f70ce0f95ee","c":"d83c5007847b40c23e264fcd3ab0430d48318e5fc41d48173bb038349aab8b2e","t":"D","a":2,"s":0},"D-012":{"h":"5bb535c89eae5f344ebf3e51a9ed84d1e1bc6eb20f37f282a6579b4b782d1e3c","c":"ad6da78e5182c078096311e632047c6fa06e33d31e5264f3c19abe1c1fadde93","t":"D","a":2,"s":0},"D-013":{"h":"b4320f601b813c24259c9a4ee15667e94135f88e0e171fddad09c77154cd2f4e","c":"0b52c2df8ed799e6974d85ddb2395ec0aee722f49aff498180db93997840df5f","t":"D","a":2,"s":0},"D-014":{"h":"81f2f165fe8cae3753ed4fd77edd73062186e4de777683ec572c74233e873ee8","c":"8f44e24a8cc8c9ddc1dd6e4bc12f3641386e1123328bbd95646fc03fb8d67b0b","t":"D","a":2,"s":0},"D-015":{"h":"c27c0f2ad27480f7664a180df150185d7316cf391f83d6d4ba4179d91f56fef9","c":"c240ca2fc50538da9d8dc50cfdeca69054d011b44e0ddb2fd49f3a030df4f3be","t":"D","a":2,"s":0},"D-016":{"h":"777058f1dc4433855e6d8ef4953062b658e47d899595e6f058ace9128eb89dce","c":"ba5ae0a6127e208f04dace4e2f8df10dd50395555039d0608bdcda94fad35c37","t":"D","a":2,"s":0},"D-017":{"h":"1980ac40986a8608149ff7e6de2c602c1537343d3653f77a23b131836885028a","c":"a4f4a86fad154f27793f8ec8e3ea82645ad15c15a7fb9cd7219f549e315d2acc","t":"D","a":2,"s":0},"D-018":{"h":"21d5d4ab9e254640ddfa7a2f9faeb8918cb760b18d0d6137a20fafe8491aae3d","c":"0d8446617f9e9d6729027b94e2bdb2070e6ada6f4197c8721e077a2037e39aed","t":"D","a":2,"s":0},"D-019":{"h":"03ab3086a79d6ffbd233a0b36c9c8b93cc3bb53ced80fd9aaef9b39ee29319d0","c":"e35cb3072c207cbeb236030305c4265a377457d9d113dd6424aa1a5eeeb4adef","t":"D","a":2,"s":0},"D-020":{"h":"3242eef5f6560838f5bb6f37bb2cd6cb67167c0ed1a9738640831edaaab8fe1d","c":"c47a5362f4448703628a23b8ec5a6f174450d7580c9b8fab47dcd4327310289e","t":"D","a":2,"s":0},"D-021":{"h":"738c482259fffd31cd02bcad03805f097b3e544632a8af4316ff6626ee1e36c8","c":"ddd6b43bd64cb0bca4ace2f6d7b3eaed63a1941e60d322b6d44bc39611314f66","t":"D","a":2,"s":0},"D-022":{"h":"8a5013e24f1aa1041256ec28fbd74fd3c90fc8acaf4ad5c3d7ba30572fc70a69","c":"701d8e7eea2d125df113481d59d3e8e85697403786f56ca1ed922943549d351b","t":"D","a":2,"s":0},"D-023":{"h":"9dcbd9d187da70de7ff2a475dfd95deef998625a689cbd2754561713d5c8b91b","c":"8c15526b651b060bde7d5be5656e93c8823725a56c1be5ae4acae2894833f4f4","t":"D","a":2,"s":0},"D-024":{"h":"c841244b65a388e6c9015bc0e7fbc04ce186b80fae9a395cce7548d7ec61a5d2","c":"02441999907127903e0a08a654088ab4584804ac7cf230d0bb06e88151a34bf2","t":"D","a":2,"s":0},"D-025":{"h":"e149315493515e44dd4df2eb941d1b8e7e25cadf250a82b309cb1fe86eecca21","c":"d80e9832d032c8eb57c935aceaa5201e9bf52c8772db13c2499588a3da46b79c","t":"D","a":2,"s":0},"D-026":{"h":"5cdaa8e4915f9f067c7bd215b52914a32dbbcff9f5e336bf145c3791ea8f2d23","c":"6a2ad6e559cf3719724b5a6b922b296173f1a2a24754a604d5d68ab479ab4c10","t":"D","a":2,"s":0},"D-027":{"h":"1569ec58ea3a3a4ae530b6b43a9dce4bd0e8b9302866df16852fb1bef460fd93","c":"45b9caf7ec85cd3729d0a2621ab792d44843a8ac6cdbc61609abe2f385d29d02","t":"D","a":2,"s":0},"D-028":{"h":"824a52e05a6a1a69a7e565e1a6c81344e36481dd359c1b539dc8a3f1212373b1","c":"05b8e086446ecf16a0bfa02547f89784b8e727cfe44cf6e36b4d8cf6c31764ef","t":"D","a":2,"s":0},"D-029":{"h":"abcf41f721a3a9794ebc06f7ae6d3e3ab4fd6f2560527ec8f7908434c22b7fbf","c":"219c978b7a48f5f64b2ca62ff2a820bb9117b3a05b1128ca0c15c58a94954aae","t":"D","a":2,"s":0},"D-030":{"h":"341f104773f1e316a2d13d6c7940c7b10211610553c1b0af3f1e713111cb73f0","c":"75048b01324a3debfea95884ab2ad8f16b21665e67c34280130aead926907684","t":"D","a":2,"s":0},"D-031":{"h":"c33d9fe06dac7a40cce232b928eea27ba43a764cc8eafa2e68d466d765e76fbb","c":"7aa0100cac879d01ae0771b45e46420fcf32c4846666733102748362d1b00aad","t":"D","a":2,"s":0},"D-032":{"h":"2dc2fbce21cd3fe61deb46d4209dec8ba769d2de24d79908ca4fd5da6584536a","c":"4b3c9365b273a38e9203bb548a50080f5b17126f10a3332b28289d2b2e8905d0","t":"D","a":2,"s":0},"D-033":{"h":"001104562c92aab295d49c7a1f9282f689ed15e222f6749ff4aad741c59c2d49","c":"9d9c084bf46cf4b7e07cf20c364b24c13b27c2dca6cd113b3e29804c499e1d0c","t":"D","a":2,"s":0},"D-034":{"h":"954076fc73f61dab5a0fefd62e6ab79f3ee4037a06667adc6caa269282740096","c":"400699eb48a15bd5e770d5bd8dcee0f5f197c4f0480dfd33f7b86da6ac2edaed","t":"D","a":2,"s":0},"D-035":{"h":"e0e237d04880e240e88f8ac79902e39f4a4ec88da951f01d3a07c15b6c90395f","c":"9660b93f58498d335767240d9a1cf49885e8396a5071de000681fa57e2a32285","t":"D","a":2,"s":0},"D-036":{"h":"5cd4f9314c5f1b0364997dbdca48ed93568234dd9e9b4633e0aaed642b9ea5c3","c":"bd429d0abd613cb2c550d6696975464ae324a29103124ef653dcd74c9f7ed12b","t":"D","a":2,"s":0},"D-037":{"h":"5a15a78c2fc6e823d900f8bf567ef191baacdee3afcbbc137c37769f9d2c5dfd","c":"d09f329c2509cba52d146929a8f3abf4de03d8c5f88c2e0d8957d2c1e69e0792","t":"D","a":2,"s":0},"D-038":{"h":"855a706014cffd251391b20e6dc921a258e8fd35afa94ec52878126c1c14e9ce","c":"2267aac1c02e455b6b6611fb09239cebf8a3daaca60868545b0ce8f3e8d64ec4","t":"D","a":2,"s":0},"D-039":{"h":"b1c9845e3da9d235558ef887ffe21c3bd2f9a2cc6bc1f264ac6e0fffd83e62e1","c":"dcfe032accfa172922978a315486a153f65667f12c8fa35c5db011722a33cbe8","t":"D","a":2,"s":0},"D-040":{"h":"1cb601233887b15f44c8db6c494537236090ad265242817b0ee74d0899fb452d","c":"ff43196a1630e381ef718febb5433892f408ccb4d5241a750420169d2b57ef99","t":"D","a":2,"s":0},"D-041":{"h":"35f29660dc30d6a79e8c7fc9b0c94486920fe0ab7155e4646913e6681167374c","c":"11e58cec5b68eb4db174db6d706921e60dd7c087629cabddfb27a15e5aa6d3f3","t":"D","a":2,"s":0},"D-042":{"h":"a732935dac6ccfd9042939e20833f1185f3663c11e75b85a6c5fdf5537ac5ad8","c":"398c08b417cd3062ae31447a6d6f8d3ee618f2ce01eaa9d86216bb5dae375384","t":"D","a":2,"s":0},"D-043":{"h":"c6faabe7b784910b11a7993e361487281d580235a92a726e08af499e0da71717","c":"8091d741bd1dd7fe25de7a1fa6f4e77ec17d38738b7cd8d8b089316fba54161b","t":"D","a":2,"s":0},"D-044":{"h":"7716fe1b33d4e762f6ccd78ede3d9a4359d82fbf8adb88cead87629daed7af0c","c":"d4db0d2cc7a8e043f1f642cd20b12eb194340551a0fa9bf7ec86d7f6bf38aac7","t":"D","a":2,"s":0},"D-045":{"h":"6bd99f9030f34f92b8b637d95d3360485f1be1e22489fb46950af0a40e489ed1","c":"44936573c8743404eaf7ff0c484522befb31a6e19005d03ee1b3a53fac5270c3","t":"D","a":2,"s":0},"D-046":{"h":"2d677c14e22193dcbb08329c9d940715a1fb294df590b35d28dea63797a347fa","c":"be6966f341f88315a547783010d2546d5357b3267f380109c331f7c06076ced6","t":"D","a":2,"s":0},"D-047":{"h":"bb302eb54a804ebb0eb460b1b251b4dc0afbff431cb573b299d885522ddc6d72","c":"b1fa2a3c094d45726fa0abdcde752c72dd69628a9d30ecf7ef88850c5acaa1af","t":"D","a":2,"s":0},"D-048":{"h":"e4ffab2a9a95b9ae83d6c0a8e75724b30e51e8b7066b0b90b4a3f19ccadcacca","c":"95324f7f90f16311f89a5032a94638d2cd8e8016dd5ba553c411d0c6da2ef2dc","t":"D","a":2,"s":0},"D-049":{"h":"fbfd9f5d6a7777c30c893a1f4b9a98dd674dace811b3a5214a731985407d5159","c":"9ee251f4a696228d3d2c652acda16923c53e3700748cb303dbd29c6f0d25eb5c","t":"D","a":2,"s":0},"D-050":{"h":"ed3d432de65e0dee1ce2ff087f11d7fa6d2730a8e42f8e3e1c683f4c79504578","c":"0677afe447df958b2b5e8caae21321498b906fa30f8c0e2a35a263c847798232","t":"D","a":2,"s":0},"D-051":{"h":"bcee1d4e20c97703e826a674ad2b680bb8dc8daff2b21f96eacc44572fd034ab","c":"fb727001025c935184f5d36b5d74bf6afbb6e8c989adac30f335ad283949a964","t":"D","a":2,"s":0},"D-052":{"h":"5df8da4df15d4e247437c57277aeb86b1dbb7e54118c367653c635d801beeedf","c":"2ddb850c0ecdd3b5210c247d208b7f2cff17e5437c89451fddb3d1408c0aa8e3","t":"D","a":2,"s":0},"D-053":{"h":"133a88f2b148bf94d344336c709e753c9636c97e600befcc00584d6e947a2cf3","c":"f7ff838fce81376ed17955a93f9499ac5ce56ac5f7bd427a9cc809aef9af857a","t":"D","a":2,"s":0},"D-054":{"h":"cb7caa23a63ebf315d7e45a76d6ec1e6c591a7fead9befeae507f65aa575cf85","c":"deec5fd9b6e268aaf3711e22b477fb4c1cfdd33a20e5ef5031975104b51e7d85","t":"D","a":2,"s":0},"D-055":{"h":"71619ce5f41d1f63ef001116ec3599c026896ee38f098e184e20f32f474abdd5","c":"9cea550208f5cf49c587fc98f2388427ba2ee32cd024421d6a3c5b38a5467c93","t":"D","a":2,"s":0},"D-056":{"h":"a92e7564291f61e6ed44b86e9007ab644881d6bdaebdd7c68fadab9425573576","c":"9702e884b8291516c2e81b9d2334660db9dd934f09c0a24988f3486b229d892a","t":"D","a":2,"s":0},"D-057":{"h":"5ed237c9f8619444e902e34a973fdd9cd3ba11770f9858dc0568d6dd7988e424","c":"28d66559c07045f7fd7e96e8b77ac8e254c4bdb3c9d3e3f525f9c8f9fb708806","t":"D","a":2,"s":0},"D-058":{"h":"5d742c96ed2511a2b8f54f4e96e09b975f18442f684e78eca70c0ac6e4d1e07f","c":"cf155b522c0fd31c37281976d10b53e1229d9480147f943be8ec6e87c3c16ea1","t":"D","a":2,"s":0},"D-059":{"h":"26e0d341b5780208c2c20ba82c1d5278f6bb731b5e331ca2e7cfbbe30f597367","c":"cf06a02d12a2d739f4aa7e20cfac7bdbe325d4d1b71093a66daf840f72e7279d","t":"D","a":2,"s":0},"D-060":{"h":"ba6ea6af9245fe84dd5b765cbac0dac239f027a402a7846cd7e135ec06dc4922","c":"593bc2555071fde41771dcac5b915552a57a2420c8a0a73f8465d4ac66158bca","t":"D","a":2,"s":0},"D-061":{"h":"9c70ece02fb2ccdd13e01140bf84c3b7d2a5acee85f0041128ff1ee1febbcfa9","c":"f97ab86d50c3bde3fda552ca0db389ff1696b948d3dc19db367b74378d86666c","t":"D","a":2,"s":0},"D-062":{"h":"b1537e35145d1abe07f3237776e25eef1e94e700f377da7f948af7fd08e8e184","c":"ef445531c781ad856ab564cdcfc38899feaf91773a21b8f39848fbb5f06dd179","t":"D","a":2,"s":0},"D-063":{"h":"9156a8ee6817830a515286138110142ea118ac8f6ba386c0ddefcd40ade2112f","c":"e84cbf7e892e0ca4521301e53de2258543dd836c3d7a86fff6515f740125c851","t":"D","a":2,"s":0},"D-064":{"h":"da914eb3b65159e3b8f29ab44436916261e2962858b1295768407549ef0d1be6","c":"7de6541020ce4be88f045830aa93e493d197c79db2c7ce4d65908b4b7af31222","t":"D","a":2,"s":0},"D-065":{"h":"7013a5ef15740bdd563740a3ac151aa67c101cf389a25fdc9823fd06d4a49155","c":"2a0fb1b7cd425cc1cf1b4a5194eddb229b36ce289fbdb49ec855c3ffa83e72f9","t":"D","a":2,"s":0},"D-066":{"h":"c7d507ff7b441cd19b7cde40f83266289ef523ac7fcf7d05fc28e5f8ae28594d","c":"60fabd9ebbd2b5340b02081f8d1f0c01354e73eb783082aa736474157a681594","t":"D","a":2,"s":0},"D-067":{"h":"59ccd4763902255bd7c0dfc8a1249ea73130669e6c6df9ae24695aae7effc3cb","c":"617dccef1391d53f5135eb4cb3cdf283dd97f367f7112875001b97bb209c89b9","t":"D","a":2,"s":0},"D-068":{"h":"f48f452ff3d7c5d7ca159ffa3516a499ef5ad6778317efe0c135b9f26eb78215","c":"ee6d42b9c64a5f7f7e01b1dc3421a0dd1284200d92f433dfc60ad7e7b165fbc4","t":"D","a":2,"s":0},"D-069":{"h":"583d70ec0071b8b4f1e2e2ddae45871b426fed08fc9aec55851867ec138889f7","c":"763b8053537445a90fa88ff91762bc16d9f17678daa89b2ecf9402c6bdd19802","t":"D","a":2,"s":0},"D-070":{"h":"80e7ce8ffd3936f46a2515d45751d2f65695609e9b8f8aad3d1d35b83a4379d7","c":"1963a4ce248f7326123dd7e7a10716855dcd908eec3cda518d7c561df3e40a93","t":"D","a":2,"s":0},"D-071":{"h":"e28551b6248abf4efb7ea80e0058b5c1277517d5b97bd365fbcfd36ff05591cd","c":"2a16dc0d51eb90b4712ea0b37204fcc9ae487427b654f11987eeeef647c76a79","t":"D","a":2,"s":0},"D-072":{"h":"ada38a36c09830ae4dd05ce8ffa7ca1c633b319092f4decbc513e1a85aa86c8e","c":"129d9b808fb33f17d151b12128fa354d76dee09db1052aa030b292f0716665d3","t":"D","a":2,"s":0},"D-073":{"h":"71bda6178210d7ed076bfc8125bacb3a8e7012ccd2f5d2019d3a2e46baa12c26","c":"2bdc473b3f1b18ced43b5b695e55a5efacf688458033982b4883ee534c0fe432","t":"D","a":2,"s":0},"D-074":{"h":"cc2c65d0bf792b329187656711d8ccd91eff83e658095ea92fabcc23d96d2071","c":"39c8aac30e18bd4609c93f7a46d580ccfe0be7bd66acd5f3e304733f4b30783c","t":"D","a":2,"s":0},"D-075":{"h":"5a605416b2c2b8708f9786dd9d48e1a961d6c105c691a25d43d426ef168f2885","c":"ce4e500aab39500cf0c08804e307fb977fdb765619e0be15d2f6c68f0478e21c","t":"D","a":2,"s":0},"D-076":{"h":"dfdefd3d5e5ee2969882b281016d162b42264973b4d9967df259d85e5ee434f6","c":"eac8298f85d3f54a806863c9918ee83178e0f0f395cd1758e2e31b64f069fdfb","t":"D","a":2,"s":0},"D-077":{"h":"6ef5244d84bd07c7a9c168bd5422a212fca1cb838be92d6da5e92eee721a3279","c":"8c1e929c6d0aaba43d40571fc6dd16c2b5d7f158fed8f0cc8b011abf5f587505","t":"D","a":2,"s":0},"D-078":{"h":"6cf1e4367f5fa16d98171bfca6f277e0d982e23fa0f1448c9f3169fa11d80d41","c":"6635c58d2acaddfa0c9803d8f8e82d5185a8e817470a915b7b56cdd8f57c93a2","t":"D","a":2,"s":0},"D-079":{"h":"4c71b4b16513fdb83b4d827f02b40d859116518e7dee2b8b5d098b4ba50bdf02","c":"30c8f2f672c3839acc39cfa19bdea91552905b45c32ca652e5a616e38d384eed","t":"D","a":2,"s":0},"D-080":{"h":"9c72e273b0630ddb4c52a12dfb78101df79f7d5e9881b4311c672fdf0cdf17ca","c":"0793e1384ac5ce2688778ff3b9127d35aad4f3e15ea265198e42c2bed354a98c","t":"D","a":2,"s":0}};      // serial -> { h: proof of signature, c: proof of 4-letter code, t: S|D, a: admits, s: sold when page was built }
+const EVENT_NAME = "RÜVA · BLUE HOUR VOL. 01";
+const BUILT = "08 Oct 20:02";
+
+const $ = id => document.getElementById(id);
+$('evt').textContent = EVENT_NAME;
+
+/* ---------- saved state (this phone only) ---------- */
+let scans = storeApi.get('ruva_scans', {});   // serial -> { n: entries used, last: iso time }
+let log = storeApi.get('ruva_log', []);
+let sales = storeApi.get('ruva_sales', {});   // loaded from sellers: serial -> { st, t }
+let salesAt = storeApi.get('ruva_sales_at', '');
+
+const isSold = serial => { const x = sales[serial]; return x ? x.st === 1 : !!TICKETS[serial].s; };
+
+/* ---------- ticket checking ---------- */
+function checkTicket(serial, kind, proof) {
+  const t = TICKETS[serial];
+  if (!t) return { status: 'INVALID', serial };
+  const given = kind === 'qr' ? sha256(serial + '|' + proof) : sha256(serial + '|' + String(proof).toUpperCase());
+  if (given !== (kind === 'qr' ? t.h : t.c)) return { status: 'INVALID', serial };
+  if (!isSold(serial)) return { status: 'NOT_SOLD', serial, type: t.t };
+  const used = (scans[serial] && scans[serial].n) || 0;
+  if (used >= t.a) return { status: 'USED', serial, type: t.t, admits: t.a, used, last: scans[serial].last };
+  return { status: 'VALID', serial, type: t.t, admits: t.a, entry: used + 1 };
+}
+
+/* ---------- screen ---------- */
+function refreshStats() {
+  let sold = 0;
+  for (const k in TICKETS) if (isSold(k)) sold += TICKETS[k].a;
+  const inn = Object.values(scans).reduce((n, s) => n + s.n, 0);
+  $('sIn').textContent = inn; $('sSold').textContent = sold; $('sLeft').textContent = Math.max(0, sold - inn);
+  const loaded = Object.keys(sales).length;
+  $('salesNote').innerHTML = 'Ticket list built ' + esc(BUILT) + '. ' +
+    (loaded ? 'Sales loaded for <b>' + loaded + '</b> tickets' + (salesAt ? ' (last ' + esc(fmtTime(salesAt)) + ')' : '') + '.' : 'No sales loaded yet.') +
+    ' Tickets sold after that need a new <b>Load sales</b>.';
+}
+function renderLog() {
+  const rows = log.slice(-30).reverse();
+  $('log').innerHTML = rows.length ? rows.map(e => {
+    const col = e.status === 'VALID' ? 'var(--ok)' : e.status === 'NOT_SOLD' ? 'var(--warn)' : 'var(--bad)';
+    return '<div><span>' + esc(fmtTime(e.t)) + ' · ' + esc(e.serial === '?' ? 'unknown ticket' : e.serial) + '</span><b style="color:' + col + '">' + esc(e.status.replace('_', ' ')) + '</b></div>';
+  }).join('') : '<div><span style="color:var(--mute)">Nothing scanned yet</span></div>';
+}
+function setLast(res) {
+  const el = $('last');
+  const cls = res.status === 'VALID' ? 'ok' : res.status === 'NOT_SOLD' ? 'warn' : 'bad';
+  const txt = { VALID: 'Valid', USED: 'Already used', NOT_SOLD: 'Not activated', INVALID: 'Invalid / fake' }[res.status];
+  el.className = 'last ' + cls;
+  el.textContent = 'Last: ' + (res.serial && res.serial !== '?' ? res.serial : 'unknown ticket') + ' · ' + txt;
+}
+
+function beep(ok) {
+  try {
+    const ctx = beep.ctx || (beep.ctx = new (window.AudioContext || window.webkitAudioContext)());
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.value = ok ? 880 : 220; o.type = 'square'; g.gain.value = 0.06;
+    o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime + (ok ? 0.12 : 0.35));
+  } catch (e) {}
+  try { navigator.vibrate && navigator.vibrate(ok ? 60 : [120, 60, 120]); } catch (e) {}
+}
+
+/* ---------- scan result popup ---------- */
+let lastText = '', lastAt = 0;
+function resultPopup(res) {
+  let o;
+  if (res.status === 'VALID') {
+    o = { tone: 'ok', icon: '✓', title: 'VALID',
+          body: '<b>' + esc(res.serial) + '</b> · ' + typeName(res.type) + '<br>' + (res.admits > 1 ? 'Entry ' + res.entry + ' of ' + res.admits : 'Let them in'),
+          autoClose: 1800 };
+  } else if (res.status === 'USED') {
+    o = { tone: 'bad', icon: '✕', title: 'ALREADY USED',
+          body: '<b>' + esc(res.serial) + '</b> · all ' + res.admits + (res.admits > 1 ? ' entries' : ' entry') + ' used<br>Last scan ' + esc(fmtTime(res.last)) + '<br><b>Do NOT admit</b>' };
+  } else if (res.status === 'NOT_SOLD') {
+    o = { tone: 'warn', icon: '!', title: 'NOT ACTIVATED',
+          body: '<b>' + esc(res.serial) + '</b> was never marked as sold.<br>Send the person to the team lead, or tap <b>Load sales</b> if sales were missed.' };
+  } else {
+    o = { tone: 'bad', icon: '✕', title: 'INVALID / FAKE', body: 'This ticket is not recognised.<br><b>Do NOT admit</b>' };
+  }
+  return UI.modal(Object.assign({ solid: true, backdropClose: true, buttons: [{ label: 'OK', value: true }] }, o))
+    .then(() => { lastAt = Date.now(); });
+}
+
+function handle(serial, kind, proof) {
+  const res = checkTicket(serial, kind, proof);
+  if (res.status === 'VALID') {
+    scans[serial] = { n: res.entry, last: new Date().toISOString() };
+    storeApi.set('ruva_scans', scans);
+  }
+  log.push({ t: new Date().toISOString(), serial: res.serial || '?', status: res.status });
+  log = log.slice(-2000); storeApi.set('ruva_log', log);
+  beep(res.status === 'VALID');
+  setLast(res); renderLog(); refreshStats();
+  resultPopup(res);
+  return res;
+}
+
+function onCode(text) {
+  if (!text) return;                                         // blank read: nothing to check
+  if (UI.isOpen()) return;                                   // a popup is showing: ignore the camera until it closes
+  const now = Date.now();
+  if (text === lastText && now - lastAt < 3500) return;     // same code still in front of the camera
+  lastText = text; lastAt = now;
+  const q = parseQR(text);
+  if (!q) { handle('?', 'qr', ''); return; }
+  handle(q.serial, 'qr', q.sig);
+}
+
+/* ---------- camera ---------- */
+let cam = null;
+$('startBtn').onclick = async () => {
+  if (cam) return;
+  try {
+    cam = await QRCam.start($('video'), onCode);
+    $('camoff').style.display = 'none';
+  } catch (e) {
+    UI.modal(QRCam.errorPopup(e.code));
+  }
+};
+
+/* ---------- manual check ---------- */
+$('mGo').onclick = () => {
+  const s = normSerial($('mSerial').value), c = $('mCode').value.trim().toUpperCase();
+  if (!s || c.length !== 4) {
+    UI.modal({ tone: 'warn', title: 'Check the details', body: 'Type the serial (like <b>S-014</b>) and the <b>4-character code</b> printed under the QR.' });
+    return;
+  }
+  handle(s, 'code', c);
+  $('mSerial').value = ''; $('mCode').value = '';
+};
+
+/* ---------- load sales from sellers ---------- */
+async function loadSales() {
+  const r = await UI.modal({
+    tone: 'info', icon: '⇩', title: 'Load sales',
+    body: 'Paste the <b>sales code</b> your seller copied from their Sell page. You can load several, they add together.',
+    input: { rows: 6, placeholder: 'RUVA1|S-001:1:...' },
+    buttons: [{ label: 'Cancel', value: false, kind: 'ghost' }, { label: 'Load', value: true }],
+  });
+  if (r.value !== true) return;
+  if (!r.text.trim()) { UI.modal({ tone: 'warn', title: 'Nothing pasted', body: 'Paste the sales code first.' }); return; }
+  const d = Sales.decode(r.text);
+  if (!d.ok) {
+    UI.modal({ tone: 'bad', title: d.why === 'damaged' ? 'Code is damaged' : 'Not a sales code',
+      body: d.why === 'damaged' ? 'Part of the text is missing or changed. Ask the seller to copy and send it again.' : 'That does not look like a sales code. It starts with <b>RUVA1|</b>.' });
+    return;
+  }
+  const m = Sales.merge(sales, d.recs, TICKETS);
+  storeApi.set('ruva_sales', sales);
+  salesAt = new Date().toISOString(); storeApi.set('ruva_sales_at', salesAt);
+  refreshStats();
+  let body = '<b>' + m.added + '</b> newly sold' + (m.voided ? ' · <b>' + m.voided + '</b> cancelled' : '') + '<br>' + m.same + ' already known';
+  if (m.unknown) body += '<br>' + m.unknown + ' not from this event (ignored)';
+  if (d.bad) body += '<br>' + d.bad + ' unreadable entries skipped';
+  UI.modal({ tone: 'ok', title: 'Sales loaded', body });
+}
+$('loadBtn').onclick = loadSales;
+
+$('clearSales').onclick = async e => {
+  e.preventDefault();
+  if (!Object.keys(sales).length) { UI.modal({ tone: 'info', title: 'Nothing to clear', body: 'No sales have been loaded on this phone.' }); return; }
+  const ok = await UI.confirm({ tone: 'warn', title: 'Clear loaded sales?', body: 'Tickets will show <b>NOT ACTIVATED</b> until you load the sales again. Entry counts stay.', yes: 'Clear', danger: true });
+  if (!ok) return;
+  sales = {}; storeApi.set('ruva_sales', sales); storeApi.set('ruva_sales_at', ''); salesAt = '';
+  refreshStats();
+};
+
+/* ---------- log + reset ---------- */
+$('exportBtn').onclick = () => {
+  if (!log.length) { UI.modal({ tone: 'info', title: 'Nothing to download', body: 'No tickets have been scanned yet.' }); return; }
+  downloadText('ruva_gate_log.csv', ['time,serial,result', ...log.map(e => e.t + ',' + e.serial + ',' + e.status)].join('\n'), 'text/csv');
+};
+$('resetBtn').onclick = async () => {
+  const r = await UI.modal({
+    tone: 'bad', title: 'Erase all scans?',
+    body: 'This forgets who has already entered on this phone. Type <b>RESET</b> to confirm.',
+    input: { placeholder: 'RESET', upper: true },
+    buttons: [{ label: 'Cancel', value: false, kind: 'ghost' }, { label: 'Erase', value: true, kind: 'danger' }],
+  });
+  if (r.value !== true) return;
+  if (r.text.trim().toUpperCase() !== 'RESET') { UI.modal({ tone: 'warn', title: 'Not erased', body: 'You need to type <b>RESET</b> exactly.' }); return; }
+  scans = {}; log = []; storeApi.set('ruva_scans', scans); storeApi.set('ruva_log', log);
+  $('last').className = 'last'; $('last').textContent = 'Ready. Scan a ticket.';
+  refreshStats(); renderLog();
+  UI.modal({ tone: 'ok', title: 'Scans cleared' });
+};
+
+/* ---------- start ---------- */
+refreshStats(); renderLog();
+if (!Object.keys(sales).length && !Object.values(TICKETS).some(t => t.s)) {
+  UI.modal({
+    tone: 'warn', title: 'No sales loaded',
+    body: 'Until you load the sales, every ticket will show <b>NOT ACTIVATED</b>.',
+    buttons: [{ label: 'Later', value: false, kind: 'ghost' }, { label: 'Load sales', value: true }],
+  }).then(r => { if (r.value === true) loadSales(); });
+}
+</script>
+</body>
+</html>

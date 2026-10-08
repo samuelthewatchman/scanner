@@ -1,0 +1,19 @@
+{
+  "brand": "RÜVA",
+  "event_title": "BLUE HOUR VOL. 01",
+  "event_line": "Same Energy. Different Nights.",
+  "date_text": "7 NOVEMBER 2026",
+  "time_text": "TIME TBA",
+  "venue_text": "EMOJI ISLAND, ATINGA JUNCTION",
+  "single": {
+    "label": "SINGLE",
+    "admits": 1,
+    "price": 50
+  },
+  "double": {
+    "label": "DOUBLE",
+    "admits": 2,
+    "price": 80
+  },
+  "terms": "Non-refundable · One entry per person · Void if copied"
+}
